@@ -1,0 +1,28 @@
+# IDEA 本地配置文件，不上传
+.idea/
+*.iml
+out/
+
+# Maven 各模块编译产物 target
+**/target/
+
+# Nacos注册中心完整安装包，绝对不上传仓库
+nacos-server-2.2.3/
+
+# 前端超大依赖包、打包产物
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# 运行日志、缓存文件
+logs/
+*.log
+*.out
+
+# 系统隐藏垃圾文件
+.DS_Store
+Thumbs.db
+
+# 本地数据库备份文件
+database/*.bak
+database/*.sql.old
