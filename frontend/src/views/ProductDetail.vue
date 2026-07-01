@@ -265,6 +265,58 @@
         </div>
       </div>
 
+      <!-- 商品评价 -->
+      <div v-if="product" class="review-section">
+        <h3 class="section-title">
+          <span>商品评价</span>
+          <span class="review-count">({{ reviewTotal }}条)</span>
+        </h3>
+
+        <div v-if="reviewLoading" class="loading-mini">加载中...</div>
+
+        <div v-else-if="reviewList.length === 0" class="empty-review">
+          <el-empty description="暂无评价，快来抢沙发吧~" :image-size="80" />
+        </div>
+
+        <div v-else class="review-list">
+          <div v-for="review in reviewList" :key="review.id" class="review-item">
+            <div class="review-header">
+              <div class="review-user">
+                <el-avatar :size="36">
+                  {{ review.isAnonymous ? '匿' : (review.userName || '用').charAt(0) }}
+                </el-avatar>
+                <div class="user-info">
+                  <span class="user-name">
+                    {{ review.isAnonymous ? '匿名用户' : (review.userName || '用户') }}
+                  </span>
+                  <div class="review-rating">
+                    <el-rate v-model="review.rating" disabled size="small" />
+                  </div>
+                </div>
+              </div>
+              <span class="review-time">{{ formatReviewTime(review.createdAt) }}</span>
+            </div>
+            <div class="review-content">{{ review.content || '此用户没有填写评价内容' }}</div>
+            <div v-if="review.images" class="review-images">
+              <img
+                v-for="(img, idx) in parseImages(review.images)"
+                :key="idx"
+                :src="img"
+                class="review-img"
+              />
+            </div>
+            <div v-if="review.replyContent" class="review-reply">
+              <div class="reply-label">商家回复：</div>
+              <div class="reply-content">{{ review.replyContent }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="reviewTotal > reviewList.length" class="review-more">
+          <el-button type="primary" link @click="loadMoreReviews">查看更多评价</el-button>
+        </div>
+      </div>
+
       <!-- 推荐商品 -->
       <div v-if="product" class="recommend-section">
         <h3 class="section-title">看了又看</h3>
@@ -320,6 +372,12 @@ const errorMessage = ref('')
 const currentImage = ref('')
 const recommendList = ref<any[]>([])
 const loadingRecommend = ref(false)
+
+const reviewList = ref<any[]>([])
+const reviewTotal = ref(0)
+const reviewPage = ref(1)
+const reviewPageSize = 5
+const reviewLoading = ref(false)
 
 const shopInfo = ref<any>(null)
 const defaultShopLogo = 'https://dummyimage.com/80x80/ccc/fff&text=Shop'
@@ -560,6 +618,8 @@ async function loadProduct() {
       }
       // 加载推荐商品
       loadRecommend()
+      // 加载商品评价
+      loadReviews()
     } else {
       error.value = true
       errorMessage.value = '商品不存在或已下架'
@@ -636,6 +696,58 @@ async function loadRecommend() {
   } finally {
     loadingRecommend.value = false
   }
+}
+
+async function loadReviews() {
+  if (!product.value?.id) return
+  reviewLoading.value = true
+  reviewPage.value = 1
+  try {
+    const res = await request.get(`/order/review/product/${product.value.id}`, {
+      params: { page: 1, size: reviewPageSize }
+    })
+    reviewList.value = res.data?.list || []
+    reviewTotal.value = res.data?.total || 0
+  } catch (e) {
+    console.warn('加载评价失败:', e)
+    reviewList.value = []
+    reviewTotal.value = 0
+  } finally {
+    reviewLoading.value = false
+  }
+}
+
+async function loadMoreReviews() {
+  if (!product.value?.id || reviewLoading.value) return
+  const nextPage = reviewPage.value + 1
+  reviewLoading.value = true
+  try {
+    const res = await request.get(`/order/review/product/${product.value.id}`, {
+      params: { page: nextPage, size: reviewPageSize }
+    })
+    const moreList = res.data?.list || []
+    reviewList.value = [...reviewList.value, ...moreList]
+    reviewPage.value = nextPage
+  } catch (e) {
+    console.warn('加载更多评价失败:', e)
+  } finally {
+    reviewLoading.value = false
+  }
+}
+
+function parseImages(imagesStr: string) {
+  if (!imagesStr) return []
+  try {
+    const arr = JSON.parse(imagesStr)
+    return Array.isArray(arr) ? arr : [imagesStr]
+  } catch (e) {
+    return [imagesStr]
+  }
+}
+
+function formatReviewTime(timeStr: string) {
+  if (!timeStr) return ''
+  return timeStr.replace('T', ' ').slice(0, 16)
 }
 
 async function handleAddToCart() {
@@ -1426,6 +1538,132 @@ onMounted(() => {
       height: 50px;
       font-size: 20px;
     }
+  }
+}
+
+.review-section {
+  margin-top: 20px;
+  background: #fff;
+  padding: 25px;
+  border-radius: 8px;
+
+  .section-title {
+    font-size: 18px;
+    color: #333;
+    margin-bottom: 20px;
+    padding-left: 10px;
+    border-left: 4px solid #ff4400;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .review-count {
+    font-size: 14px;
+    color: #999;
+    font-weight: normal;
+  }
+
+  .loading-mini, .empty-review {
+    text-align: center;
+    padding: 30px;
+    color: #999;
+  }
+
+  .review-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .review-item {
+    padding: 16px;
+    background: #fafafa;
+    border-radius: 8px;
+    border: 1px solid #f0f0f0;
+
+    .review-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .review-user {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+
+      .user-info {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+
+        .user-name {
+          font-size: 14px;
+          color: #333;
+          font-weight: 500;
+        }
+
+        .review-rating {
+          :deep(.el-rate__icon) { font-size: 14px; }
+        }
+      }
+    }
+
+    .review-time {
+      font-size: 12px;
+      color: #999;
+    }
+
+    .review-content {
+      font-size: 14px;
+      color: #333;
+      line-height: 1.6;
+      margin-bottom: 12px;
+    }
+
+    .review-images {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .review-img {
+      width: 80px;
+      height: 80px;
+      object-fit: cover;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .review-reply {
+      padding: 12px;
+      background: #fff;
+      border-radius: 6px;
+      border-left: 3px solid #409eff;
+
+      .reply-label {
+        font-size: 13px;
+        color: #409eff;
+        font-weight: 500;
+        margin-bottom: 6px;
+      }
+
+      .reply-content {
+        font-size: 13px;
+        color: #666;
+        line-height: 1.5;
+      }
+    }
+  }
+
+  .review-more {
+    text-align: center;
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #f0f0f0;
   }
 }
 

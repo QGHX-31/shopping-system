@@ -10,6 +10,8 @@ public interface OrderReviewService {
 
     void addReview(Long userId, Long orderId, Long orderItemId, Long productId, Long merchantId, Integer rating, String content, String images, Integer isAnonymous);
 
+    void batchAddReviews(Long userId, Long orderId, List<Map<String, Object>> reviews);
+
     Map<String, Object> getByProductId(Long productId, Integer page, Integer size);
 
     List<OrderReview> getByOrderId(Long orderId);

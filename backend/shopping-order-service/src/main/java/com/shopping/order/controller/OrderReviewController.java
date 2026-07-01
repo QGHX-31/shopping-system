@@ -37,6 +37,20 @@ public class OrderReviewController {
         }
     }
 
+    @PostMapping("/submit")
+    public Result<Void> submit(@RequestBody Map<String, Object> body) {
+        try {
+            Long userId = Long.valueOf(String.valueOf(body.get("userId")));
+            Long orderId = Long.valueOf(String.valueOf(body.get("orderId")));
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> reviews = (List<Map<String, Object>>) body.get("reviews");
+            orderReviewService.batchAddReviews(userId, orderId, reviews);
+            return Result.success(null);
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
     @GetMapping("/product/{productId}")
     public Result<Map<String, Object>> productReviews(
             @PathVariable Long productId,

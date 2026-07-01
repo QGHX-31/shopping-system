@@ -2414,7 +2414,7 @@ async function submitReview() {
       content: item.content,
       anonymous: reviewAnonymous.value
     }))
-    await request.post('/review/submit', {
+    await request.post('/order/review/submit', {
       orderId: currentReviewOrder.value?.id,
       userId: userStore.userInfo?.id,
       reviews

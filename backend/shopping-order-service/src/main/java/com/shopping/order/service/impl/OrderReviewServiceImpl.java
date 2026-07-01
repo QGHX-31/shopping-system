@@ -79,6 +79,71 @@ public class OrderReviewServiceImpl implements OrderReviewService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void batchAddReviews(Long userId, Long orderId, List<Map<String, Object>> reviews) {
+        if (userId == null || orderId == null || reviews == null || reviews.isEmpty()) {
+            throw new BusinessException("参数不完整");
+        }
+
+        Order order = orderMapper.selectById(orderId);
+        if (order == null) {
+            throw new BusinessException("订单不存在");
+        }
+        if (!order.getUserId().equals(userId)) {
+            throw new BusinessException("无权评价此订单");
+        }
+        if (order.getStatus() != 3) {
+            throw new BusinessException("只有已完成的订单才能评价");
+        }
+
+        List<OrderItem> orderItems = orderItemMapper.selectList(
+                new LambdaQueryWrapper<OrderItem>().eq(OrderItem::getOrderId, orderId));
+        Map<Long, OrderItem> itemMap = new HashMap<>();
+        for (OrderItem item : orderItems) {
+            itemMap.put(item.getProductId(), item);
+        }
+
+        for (Map<String, Object> reviewMap : reviews) {
+            Long productId = Long.valueOf(String.valueOf(reviewMap.get("productId")));
+            Integer rating = Integer.valueOf(String.valueOf(reviewMap.get("rating")));
+            String content = (String) reviewMap.get("content");
+            String images = reviewMap.get("images") != null ? String.valueOf(reviewMap.get("images")) : null;
+            Integer anonymous = reviewMap.get("anonymous") != null ?
+                    (Boolean.TRUE.equals(reviewMap.get("anonymous")) ? 1 : 0) : 0;
+
+            if (rating < 1 || rating > 5) {
+                throw new BusinessException("评分必须在1-5之间");
+            }
+
+            if (checkReviewed(orderId, productId)) {
+                throw new BusinessException("商品已评价，请勿重复评价");
+            }
+
+            OrderItem orderItem = itemMap.get(productId);
+            Long orderItemId = orderItem != null ? orderItem.getId() : null;
+            Long merchantId = orderItem != null ? orderItem.getMerchantId() : null;
+
+            OrderReview review = new OrderReview();
+            review.setUserId(userId);
+            review.setOrderId(orderId);
+            review.setOrderItemId(orderItemId);
+            review.setProductId(productId);
+            review.setMerchantId(merchantId);
+            review.setRating(new BigDecimal(rating));
+            review.setContent(content);
+            review.setImages(images);
+            review.setIsAnonymous(anonymous);
+            review.setIsTop(0);
+            review.setStatus(1);
+            review.setCreatedAt(LocalDateTime.now());
+            review.setUpdatedAt(LocalDateTime.now());
+            orderReviewMapper.insert(review);
+        }
+
+        log.info("批量评价成功: orderId={}, count={}", orderId, reviews.size());
+    }
+
+    @Override
     public Map<String, Object> getByProductId(Long productId, Integer page, Integer size) {
         if (productId == null) {
             throw new BusinessException("商品ID不能为空");
