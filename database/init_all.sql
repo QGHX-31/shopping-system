@@ -432,16 +432,17 @@ CREATE TABLE `group_buy_activity` (
 DROP TABLE IF EXISTS `group_buy_team`;
 CREATE TABLE `group_buy_team` (
     `id`               BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '团队ID',
+    `team_no`          VARCHAR(50) UNIQUE COMMENT '拼团队编号',
     `activity_id`      BIGINT NOT NULL COMMENT '活动ID',
-    `product_id`       BIGINT NOT NULL COMMENT '商品ID',
     `leader_id`        BIGINT NOT NULL COMMENT '团长用户ID',
-    `group_size`       INT NOT NULL DEFAULT 3 COMMENT '成团人数',
-    `current_size`     INT DEFAULT 1 COMMENT '当前人数',
+    `required_num`     INT NOT NULL DEFAULT 3 COMMENT '成团人数',
+    `current_num`      INT DEFAULT 1 COMMENT '当前人数',
     `status`           TINYINT DEFAULT 0 COMMENT '状态：0进行中 1成团成功 2成团失败',
     `expire_time`      DATETIME COMMENT '过期时间',
+    `success_time`     DATETIME COMMENT '成团时间',
     `created_at`       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX `idx_activity_id` (`activity_id`),
-    INDEX `idx_product_id` (`product_id`),
     INDEX `idx_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='拼团团队表';
 
@@ -451,13 +452,11 @@ CREATE TABLE `group_buy_member` (
     `id`               BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '成员ID',
     `team_id`          BIGINT NOT NULL COMMENT '团队ID',
     `user_id`          BIGINT NOT NULL COMMENT '用户ID',
-    `order_id`         BIGINT COMMENT '订单ID',
+    `order_no`         VARCHAR(50) COMMENT '订单号',
     `is_leader`        TINYINT DEFAULT 0 COMMENT '是否团长：0否 1是',
     `join_time`        DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '加入时间',
-    `status`           TINYINT DEFAULT 0 COMMENT '状态：0待支付 1已支付 2已退出',
     INDEX `idx_team_id` (`team_id`),
-    INDEX `idx_user_id` (`user_id`),
-    INDEX `idx_order_id` (`order_id`)
+    INDEX `idx_user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='拼团成员表';
 
 -- ============================================================
