@@ -21,6 +21,7 @@ public class Refund {
     private String refundReason;
     private Integer refundType; // 1仅退款 2退货退款
     private Integer status; // 0待审核 1已同意/待退货 2已拒绝 3已完成 4已取消 5退货中
+    private Integer originalOrderStatus; // 申请退款时的原订单状态，用于拒绝时恢复
     private String voucherImages;
     private String merchantRemark;
     private String adminRemark;

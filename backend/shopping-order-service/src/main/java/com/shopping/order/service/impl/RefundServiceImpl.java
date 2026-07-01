@@ -85,6 +85,7 @@ public class RefundServiceImpl implements RefundService {
         refund.setRefundReason(reason);
         refund.setRefundType(type != null ? type : 1);
         refund.setStatus(0); // 待审核
+        refund.setOriginalOrderStatus(order.getStatus()); // 保存原订单状态
         refund.setApplyTime(LocalDateTime.now());
         refundMapper.insert(refund);
 
@@ -144,19 +145,17 @@ public class RefundServiceImpl implements RefundService {
             refund.setAuditTime(LocalDateTime.now());
             refundMapper.updateById(refund);
 
-            // 恢复订单状态（根据原状态推断：已支付/待发货 或 已发货 或 已完成）
-            if (order.getStatus() == 5) {
-                // 根据订单状态是退款中，根据时间字段判断原状态
-                // 有收货时间 -> 已完成
+            // 恢复订单状态
+            if (refund.getOriginalOrderStatus() != null) {
+                // 优先使用退款时保存的原订单状态
+                order.setStatus(refund.getOriginalOrderStatus());
+            } else if (order.getStatus() == 5) {
+                // 兼容旧数据：根据时间字段推断原状态
                 if (order.getReceiveTime() != null) {
                     order.setStatus(3); // 已完成
-                }
-                // 有发货时间但无收货时间 -> 已发货
-                else if (order.getDeliveryTime() != null) {
+                } else if (order.getDeliveryTime() != null) {
                     order.setStatus(2); // 已发货
-                }
-                // 都没有 -> 待发货
-                else {
+                } else {
                     order.setStatus(1); // 已支付/待发货
                 }
             }

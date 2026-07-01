@@ -568,6 +568,7 @@ CREATE TABLE `refund` (
     `refund_reason`         VARCHAR(500) COMMENT '退款原因',
     `voucher_images`        VARCHAR(1000) DEFAULT NULL COMMENT '凭证图片，逗号分隔',
     `refund_type`           TINYINT NOT NULL COMMENT '类型：1仅退款 2退货退款',
+    `original_order_status`  TINYINT DEFAULT NULL COMMENT '申请退款时的原订单状态，用于拒绝时恢复',
     `status`                TINYINT NOT NULL DEFAULT 0 COMMENT '状态：0待审核 1待退货 2已拒绝 3已完成 4已取消 5退货中',
     `merchant_remark`       VARCHAR(500) COMMENT '商家备注/拒绝原因',
     `admin_remark`          VARCHAR(500) COMMENT '平台备注',

@@ -100,11 +100,12 @@
                     <span class="price total">¥{{ Number(row.payAmount || row.totalAmount || 0).toFixed(2) }}</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="状态" width="100">
+                <el-table-column label="状态" width="120">
                   <template #default="{ row }">
                     <el-tag :type="getOrderStatusTagType(row.status)" size="small">
                       {{ getOrderStatusText(row.status) }}
                     </el-tag>
+                    <el-tag v-if="row.refundStatus === 2" type="danger" size="small" style="margin-left: 4px;">退款被拒</el-tag>
                   </template>
                 </el-table-column>
                 <el-table-column label="下单时间" width="160">
@@ -112,15 +113,17 @@
                     <span>{{ formatTime(row.createdAt) }}</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作" width="280">
+                <el-table-column label="操作" width="320">
                   <template #default="{ row }">
                     <div class="order-actions">
                       <el-button v-if="row.status === 0" type="primary" size="small" @click="payOrder(row)">去支付</el-button>
                       <el-button v-if="row.status === 0" type="info" size="small" @click="cancelOrder(row)">取消订单</el-button>
-                      <el-tag v-if="row.status === 1" type="warning" size="small" class="wait-ship-tag">等待发货</el-tag>
-                      <el-button v-if="row.status === 1" type="warning" size="small" @click="applyRefund(row)">申请退款</el-button>
+                      <el-tag v-if="row.status === 1 && row.refundStatus !== 2" type="warning" size="small" class="wait-ship-tag">等待发货</el-tag>
+                      <el-button v-if="row.status === 1 && row.refundStatus !== 2" type="warning" size="small" @click="applyRefund(row)">申请退款</el-button>
+                      <el-button v-if="row.refundStatus === 2" type="warning" size="small" @click="applyRefund(row)">再次申请退款</el-button>
                       <el-button v-if="row.status === 2" type="success" size="small" @click="confirmReceive(row)">确认收货</el-button>
-                      <el-button v-if="row.status === 2" type="warning" size="small" @click="applyRefund(row)">申请退款</el-button>
+                      <el-button v-if="row.status === 2 && row.refundStatus !== 2" type="warning" size="small" @click="applyRefund(row)">申请退款</el-button>
+                      <el-button v-if="row.refundStatus === 2 && row.rejectReason" type="info" size="small" @click="showRejectReason(row)">拒绝原因</el-button>
                       <el-button v-if="row.status === 3 && !row.hasReview" type="warning" size="small" @click="openReviewDialog(row)">评价</el-button>
                       <el-button v-if="row.status === 3 && row.hasReview" type="info" size="small" @click="viewReview(row)">查看评价</el-button>
                       <el-button v-if="row.status === 3 || row.status === 4 || row.status === 6" type="danger" size="small" @click="deleteOrder(row)">删除</el-button>
@@ -1413,7 +1416,7 @@ async function loadOrders() {
         userId: userStore.userInfo.id,
         status: orderStatus.value ? parseInt(orderStatus.value) : null,
         page: 1,
-        size: 20
+        size: 100
       }
     })
     const data = res.data
@@ -1421,7 +1424,7 @@ async function loadOrders() {
     if (data?.list) {
       list = data.list.map((item: any) => {
         if (item.order) {
-          return { ...item.order, items: item.items, productName: item.items?.[0]?.productName, productImage: item.items?.[0]?.productImage }
+          return { ...item.order, items: item.items, refundStatus: item.refundStatus, rejectReason: item.rejectReason, productName: item.items?.[0]?.productName, productImage: item.items?.[0]?.productImage }
         }
         return item
       })
@@ -1639,6 +1642,14 @@ async function confirmRefund() {
   } catch (e: any) {
     ElMessage.error(e?.message || '申请失败')
   }
+}
+
+function showRejectReason(row: any) {
+  ElMessageBox.alert(
+    row.rejectReason || '商家未填写拒绝原因',
+    '退款拒绝原因',
+    { type: 'warning', confirmButtonText: '知道了' }
+  )
 }
 
 function deleteOrder(row: any) {

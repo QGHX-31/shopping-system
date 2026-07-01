@@ -12,11 +12,13 @@ import com.shopping.common.exception.BusinessException;
 import com.shopping.common.utils.Result;
 import com.shopping.order.entity.Order;
 import com.shopping.order.entity.OrderItem;
+import com.shopping.order.entity.Refund;
 import com.shopping.order.feign.ProductClient;
 import com.shopping.order.mapper.CouponTemplateMapper;
 import com.shopping.order.mapper.MerchantCouponParticipationMapper;
 import com.shopping.order.mapper.OrderItemMapper;
 import com.shopping.order.mapper.OrderMapper;
+import com.shopping.order.mapper.RefundMapper;
 import com.shopping.order.mapper.UserCouponMapper;
 import com.shopping.order.service.MessageService;
 import com.shopping.order.service.OrderService;
@@ -59,6 +61,7 @@ public class OrderServiceImpl implements OrderService {
     @Autowired private UserCouponMapper userCouponMapper;
     @Autowired private CouponTemplateMapper couponTemplateMapper;
     @Autowired private MerchantCouponParticipationMapper merchantCouponParticipationMapper;
+    @Autowired private RefundMapper refundMapper;
     @Autowired private MessageService messageService;
     @Autowired(required = false) private ProductClient productClient;
 
@@ -776,10 +779,27 @@ public class OrderServiceImpl implements OrderService {
                     new LambdaQueryWrapper<OrderItem>().in(OrderItem::getOrderId, orderIds));
             Map<Long, List<OrderItem>> itemMap = allItems.stream()
                     .collect(Collectors.groupingBy(OrderItem::getOrderId));
+            
+            // 查询每个订单的最新退款记录
+            List<Refund> allRefunds = refundMapper.selectList(
+                    new LambdaQueryWrapper<Refund>().in(Refund::getOrderId, orderIds)
+                            .orderByDesc(Refund::getApplyTime));
+            Map<Long, Refund> latestRefundMap = new HashMap<>();
+            for (Refund r : allRefunds) {
+                latestRefundMap.putIfAbsent(r.getOrderId(), r);
+            }
+            
             for (Order order : orders) {
                 OrderVO vo = new OrderVO();
                 vo.setOrder(order);
                 vo.setItems(itemMap.get(order.getId()));
+                Refund latestRefund = latestRefundMap.get(order.getId());
+                if (latestRefund != null) {
+                    vo.setRefundStatus(latestRefund.getStatus());
+                    if (latestRefund.getStatus() == 2 && latestRefund.getMerchantRemark() != null) {
+                        vo.setRejectReason(latestRefund.getMerchantRemark());
+                    }
+                }
                 voList.add(vo);
             }
         }

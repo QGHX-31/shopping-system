@@ -14,6 +14,8 @@ public class OrderVO {
     private CouponInfo coupon;
     private List<CouponInfo> coupons;
     private List<OrderVO> subOrders;
+    private Integer refundStatus; // 最新退款记录的状态：null=无退款, 0=待审核, 1=待退货, 2=已拒绝, 3=已完成, 5=退货中
+    private String rejectReason; // 退款被拒绝的原因
 
     @Data
     public static class CouponInfo {
