@@ -46,6 +46,9 @@ public class RefundServiceImpl implements RefundService {
     @Value("${shopping.product-service-url:http://localhost:8082}")
     private String productServiceUrl;
 
+    @Value("${shopping.marketing-service-url:http://localhost:8083}")
+    private String marketingServiceUrl;
+
     private final org.springframework.web.client.RestTemplate restTemplate = new org.springframework.web.client.RestTemplate();
 
     @Override
@@ -94,6 +97,9 @@ public class RefundServiceImpl implements RefundService {
         order.setUpdatedAt(LocalDateTime.now());
         orderMapper.updateById(order);
 
+        // 如果是拼团订单，申请退款时就取消拼团
+        cancelGroupBuyTeamIfNeeded(order);
+
         messageService.sendRefundMessage(userId, "退款申请已提交", "您的退款申请已提交，等待商家审核");
 
         return refund;
@@ -134,6 +140,8 @@ public class RefundServiceImpl implements RefundService {
 
                 // 退款成功，返还优惠券
                 releaseOrderCoupons(order);
+                // 如果是拼团订单，取消拼团
+                cancelGroupBuyTeamIfNeeded(order);
                 log.info("仅退款审核通过，退款完成: refundId={}", refundId);
 
                 messageService.sendRefundMessage(refund.getUserId(), "退款申请已通过", "您的退款申请已通过");
@@ -292,6 +300,8 @@ public class RefundServiceImpl implements RefundService {
 
         // 退款成功，返还优惠券
         releaseOrderCoupons(order);
+        // 如果是拼团订单，取消拼团
+        cancelGroupBuyTeamIfNeeded(order);
 
         // 退货退款，恢复商品库存
         restoreStock(order.getId());
@@ -305,6 +315,20 @@ public class RefundServiceImpl implements RefundService {
     @Override
     public Refund getById(Long id) {
         return refundMapper.selectById(id);
+    }
+
+    private void cancelGroupBuyTeamIfNeeded(Order order) {
+        if (order == null || order.getGroupBuyTeamId() == null) return;
+        try {
+            restTemplate.postForObject(
+                    marketingServiceUrl + "/group/team/cancel?teamId=" + order.getGroupBuyTeamId(),
+                    null,
+                    Result.class
+            );
+            log.info("退款成功，已取消拼团团队: teamId={}", order.getGroupBuyTeamId());
+        } catch (Exception e) {
+            log.warn("取消拼团团队失败: teamId={}, error={}", order.getGroupBuyTeamId(), e.getMessage());
+        }
     }
 
     private void releaseOrderCoupons(Order order) {

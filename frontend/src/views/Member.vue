@@ -100,12 +100,17 @@
                     <span class="price total">¥{{ Number(row.payAmount || row.totalAmount || 0).toFixed(2) }}</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="状态" width="120">
+                <el-table-column label="状态" width="140">
                   <template #default="{ row }">
-                    <el-tag :type="getOrderStatusTagType(row.status)" size="small">
-                      {{ getOrderStatusText(row.status) }}
-                    </el-tag>
-                    <el-tag v-if="row.refundStatus === 2" type="danger" size="small" style="margin-left: 4px;">退款被拒</el-tag>
+                    <div class="order-status-col">
+                      <div class="status-tags">
+                        <el-tag :type="getOrderStatusTagType(row.status)" size="small">
+                          {{ getOrderStatusText(row.status) }}
+                        </el-tag>
+                        <el-tag v-if="row.groupBuyTeamId" type="success" size="small" effect="plain">拼团</el-tag>
+                        <el-tag v-if="row.refundStatus === 2" type="danger" size="small">退款被拒</el-tag>
+                      </div>
+                    </div>
                   </template>
                 </el-table-column>
                 <el-table-column label="下单时间" width="160">
@@ -167,7 +172,7 @@
                   <template #default="{ row }">
                     <el-button v-if="row.groupStatus === 0 && row.status === 0" size="small" type="info" @click="cancelGroup(row)">取消拼团</el-button>
                     <el-button v-if="row.groupStatus === 0 && row.status === 1" size="small" type="warning" @click="applyRefundGroup(row)">申请退款</el-button>
-                    <el-button size="small" type="success" @click="shareGroup(row)">邀请好友</el-button>
+                    <el-button v-if="row.groupStatus === 0" size="small" type="success" @click="shareGroup(row)">邀请好友</el-button>
                     <el-button size="small" @click="viewOrderDetail(row)">详情</el-button>
                   </template>
                 </el-table-column>
@@ -1500,32 +1505,55 @@ async function loadGroupOrders() {
       } catch {}
     }
     
-    // 将订单与团队关联
+    // 将订单与团队关联，所有有groupBuyTeamId的订单都是拼团订单
     const groupOrdersList: any[] = []
     const teamIdMap = new Map(groupTeams.map((t: any) => [t.id, t]))
     
     for (const order of orders) {
       const teamId = order.groupBuyTeamId
-      if (teamId && teamIdMap.has(teamId)) {
-        const team = teamIdMap.get(teamId)
-        groupOrdersList.push({
-          ...order,
-          teamNo: team.teamNo,
-          groupStatus: team.status,
-          groupStatusText: (team.status === 1 ? '已成团' : team.status === 2 ? '已失败' : '拼团中')
-        })
+      if (!teamId) continue
+      
+      const team = teamIdMap.get(teamId)
+      const isRefundedOrCanceled = order.status === 4 || order.status === 5 || order.status === 6
+      let finalStatus = 0
+      let statusText = '拼团中'
+      let teamNo = order.orderNo?.slice(-8) || '-'
+      
+      if (team) {
+        teamNo = team.teamNo
+        finalStatus = team.status
+        if (finalStatus === 1) {
+          statusText = '已成团'
+        } else if (finalStatus === 2) {
+          statusText = '已失败'
+        } else {
+          statusText = '拼团中'
+        }
       }
+      
+      if (isRefundedOrCanceled) {
+        finalStatus = 2
+        statusText = '已取消'
+      }
+      
+      groupOrdersList.push({
+        ...order,
+        teamNo,
+        groupStatus: finalStatus,
+        groupStatusText: statusText
+      })
     }
     
-    // 如果还是没有，把所有有商品的订单都当作潜在拼团订单展示
+    // 如果还是没有拼团订单，把所有有商品的订单都当作潜在拼团订单展示（兼容旧数据）
     if (groupOrdersList.length === 0 && orders.length > 0) {
       for (const order of orders) {
         if (order.items && order.items.length > 0) {
+          const isRefundedOrCanceled = order.status === 4 || order.status === 5 || order.status === 6
           groupOrdersList.push({
             ...order,
             teamNo: order.orderNo?.slice(-8) || '-',
-            groupStatus: 0,
-            groupStatusText: '拼团中'
+            groupStatus: isRefundedOrCanceled ? 2 : 0,
+            groupStatusText: isRefundedOrCanceled ? '已取消' : '拼团中'
           })
         }
       }
@@ -2303,6 +2331,13 @@ onMounted(async () => {
     gap: 6px;
     .el-button {
       margin: 0;
+    }
+  }
+  .order-status-col {
+    .status-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
     }
   }
   .wait-ship-tag {
