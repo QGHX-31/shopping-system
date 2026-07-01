@@ -132,13 +132,30 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             return null;
         }
         if (nickname != null && !nickname.trim().isEmpty()) {
+            if (nickname.trim().length() > 20) {
+                throw new BusinessException("昵称不能超过20个字符");
+            }
             user.setNickname(nickname.trim());
         }
         if (email != null) {
-            user.setEmail(email.trim().isEmpty() ? null : email.trim());
+            String trimmedEmail = email.trim();
+            if (!trimmedEmail.isEmpty()) {
+                String emailReg = "^[\\w-]+(\\.[\\w-]+)*@[\\w-]+(\\.[\\w-]+)+$";
+                if (!trimmedEmail.matches(emailReg)) {
+                    throw new BusinessException("邮箱格式不正确");
+                }
+            }
+            user.setEmail(trimmedEmail.isEmpty() ? null : trimmedEmail);
         }
         if (phone != null) {
-            user.setPhone(phone.trim().isEmpty() ? null : phone.trim());
+            String trimmedPhone = phone.trim();
+            if (!trimmedPhone.isEmpty()) {
+                String phoneReg = "^1[3-9]\\d{9}$";
+                if (!trimmedPhone.matches(phoneReg)) {
+                    throw new BusinessException("手机号格式不正确，请输入11位有效手机号");
+                }
+            }
+            user.setPhone(trimmedPhone.isEmpty() ? null : trimmedPhone);
         }
         user.setUpdatedAt(LocalDateTime.now());
         userMapper.updateById(user);

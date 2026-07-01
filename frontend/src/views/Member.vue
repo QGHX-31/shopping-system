@@ -353,15 +353,15 @@
             </div>
           </el-tab-pane>
           <el-tab-pane label="个人设置" name="settings">
-            <el-form :model="profileForm" class="profile-form">
+            <el-form :model="profileForm" class="profile-form" ref="profileFormRef">
               <el-form-item label="昵称">
-                <el-input v-model="profileForm.nickname" />
+                <el-input v-model="profileForm.nickname" maxlength="20" />
               </el-form-item>
               <el-form-item label="邮箱">
-                <el-input v-model="profileForm.email" />
+                <el-input v-model="profileForm.email" placeholder="请输入邮箱" />
               </el-form-item>
               <el-form-item label="手机号">
-                <el-input v-model="profileForm.phone" />
+                <el-input v-model="profileForm.phone" maxlength="11" placeholder="请输入11位手机号" />
               </el-form-item>
               <el-form-item>
                 <el-button type="primary" @click="saveProfile">保存修改</el-button>
@@ -1910,6 +1910,24 @@ async function saveProfile() {
     ElMessage.warning('昵称不能为空')
     return
   }
+  if (profileForm.nickname.trim().length > 20) {
+    ElMessage.warning('昵称不能超过20个字符')
+    return
+  }
+  if (profileForm.email && profileForm.email.trim()) {
+    const emailReg = /^[\w-]+(\.[\w-]+)*@[\w-]+(\.[\w-]+)+$/
+    if (!emailReg.test(profileForm.email.trim())) {
+      ElMessage.warning('邮箱格式不正确')
+      return
+    }
+  }
+  if (profileForm.phone && profileForm.phone.trim()) {
+    const phoneReg = /^1[3-9]\d{9}$/
+    if (!phoneReg.test(profileForm.phone.trim())) {
+      ElMessage.warning('手机号格式不正确，请输入11位有效手机号')
+      return
+    }
+  }
   try {
     const res = await request.put('/user/profile', {
       nickname: profileForm.nickname.trim(),
@@ -2082,11 +2100,23 @@ watch(activeTab, (val) => {
   if (val === 'refunds') {
     nextTick(() => loadRefunds())
   }
+  if (val === 'settings') {
+    fillProfileForm()
+  }
 })
+
+function fillProfileForm() {
+  profileForm.nickname = userStore.userInfo?.nickname || ''
+  profileForm.email = userStore.userInfo?.email || ''
+  profileForm.phone = userStore.userInfo?.phone || ''
+}
 
 watch(() => userStore.userInfo, (val) => {
   if (val?.id && activeTab.value === 'orders' && orderList.value.length === 0) {
     nextTick(() => loadOrders())
+  }
+  if (val?.id) {
+    fillProfileForm()
   }
 }, { deep: true })
 
@@ -2102,9 +2132,7 @@ onMounted(async () => {
     if (activeTab.value === 'groups') {
       loadGroupOrders()
     }
-    profileForm.nickname = userStore.userInfo?.nickname || ''
-    profileForm.email = userStore.userInfo?.email || ''
-    profileForm.phone = userStore.userInfo?.phone || ''
+    fillProfileForm()
   }
 })
 </script>
