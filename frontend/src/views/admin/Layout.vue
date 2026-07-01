@@ -97,7 +97,8 @@ const defaultMenus = [
     id: 2, title: '订单管理', name: 'order', icon: 'Tickets',
     children: [
       { id: 21, title: '全部订单', path: '/admin/order/list' },
-      { id: 22, title: '退款管理', path: '/admin/refund/list' }
+      { id: 22, title: '退款管理', path: '/admin/refund/list' },
+      { id: 23, title: '换货管理', path: '/admin/exchange/list' }
     ]
   },
   {

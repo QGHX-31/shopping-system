@@ -75,7 +75,7 @@ public class ExchangeServiceImpl implements ExchangeService {
 
         // 获取新商品信息
         Map<String, Object> newProductInfo = getProductInfo(newProductId, newSkuId);
-        BigDecimal newPrice = (BigDecimal) newProductInfo.get("price");
+        BigDecimal newPrice = toBigDecimal(newProductInfo.get("price"));
         String newProductName = (String) newProductInfo.get("productName");
         String newSpecValues = (String) newProductInfo.get("specValues");
 
@@ -378,14 +378,27 @@ public class ExchangeServiceImpl implements ExchangeService {
                 Map<String, Object> productData = (Map<String, Object>) productRes.get("data");
                 result.put("productName", productData.get("name"));
                 
-                // 如果有SKU，获取SKU价格
-                if (skuId != null) {
-                    String skuUrl = productServiceUrl + "/product/sku/" + skuId;
+                // 如果有SKU，通过sku/list接口获取SKU价格
+                if (skuId != null && skuId > 0) {
+                    String skuUrl = productServiceUrl + "/sku/list?productId=" + productId;
                     Map<String, Object> skuRes = restTemplate.getForEntity(skuUrl, Map.class).getBody();
                     if (skuRes != null && skuRes.get("data") != null) {
-                        Map<String, Object> skuData = (Map<String, Object>) skuRes.get("data");
-                        result.put("price", skuData.get("price"));
-                        result.put("specValues", skuData.get("specValues"));
+                        List<Map<String, Object>> skuList = (List<Map<String, Object>>) skuRes.get("data");
+                        if (skuList != null) {
+                            for (Map<String, Object> sku : skuList) {
+                                Object idObj = sku.get("id");
+                                if (idObj != null && Long.valueOf(idObj.toString()).equals(skuId)) {
+                                    result.put("price", sku.get("price"));
+                                    result.put("specValues", sku.get("specValues"));
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    // 如果没找到对应SKU，用商品价格
+                    if (result.get("price") == null) {
+                        result.put("price", productData.get("price"));
+                        result.put("specValues", null);
                     }
                 } else {
                     result.put("price", productData.get("price"));
@@ -406,5 +419,16 @@ public class ExchangeServiceImpl implements ExchangeService {
     private String generateExchangeNo() {
         return "E" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
                 + String.format("%04d", new Random().nextInt(10000));
+    }
+
+    private BigDecimal toBigDecimal(Object value) {
+        if (value == null) return BigDecimal.ZERO;
+        if (value instanceof BigDecimal) return (BigDecimal) value;
+        if (value instanceof Number) return BigDecimal.valueOf(((Number) value).doubleValue());
+        try {
+            return new BigDecimal(value.toString());
+        } catch (Exception e) {
+            return BigDecimal.ZERO;
+        }
     }
 }

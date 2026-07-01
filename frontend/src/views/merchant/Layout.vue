@@ -32,6 +32,10 @@
           <el-icon><Reading /></el-icon>
           <span>退款管理</span>
         </el-menu-item>
+        <el-menu-item index="/merchant/exchange">
+          <el-icon><RefreshLeft /></el-icon>
+          <span>换货管理</span>
+        </el-menu-item>
         <el-sub-menu index="marketing">
           <template #title>
             <el-icon><Promotion /></el-icon>
@@ -76,7 +80,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { DataLine, Goods, Box, Promotion, User, Ticket, Reading } from '@element-plus/icons-vue'
+import { DataLine, Goods, Box, Promotion, User, Ticket, Reading, RefreshLeft } from '@element-plus/icons-vue'
 import { useMerchantStore } from '@/stores/merchant'
 
 const route = useRoute()

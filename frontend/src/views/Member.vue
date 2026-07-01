@@ -105,7 +105,7 @@
                     <div class="order-status-col">
                       <div class="status-tags">
                         <el-tag :type="getOrderStatusTagType(row.status)" size="small">
-                          {{ getOrderStatusText(row.status) }}
+                          {{ getOrderStatusText(row.status, row.exchangeStatus) }}
                         </el-tag>
                         <el-tag v-if="row.groupBuyTeamId" type="success" size="small" effect="plain">拼团</el-tag>
                         <el-tag v-if="row.refundStatus === 2" type="danger" size="small">退款被拒</el-tag>
@@ -279,8 +279,8 @@
                   <template #default="{ row }">
                     <div class="action-buttons">
                       <el-button v-if="row.status === 1" type="primary" size="small" @click="showExchangeReturnShipDialog(row)">填写退货物流</el-button>
-                      <el-button v-if="row.status === 5" type="success" size="small" @click="confirmExchangeReceive(row)">确认收货</el-button>
-                      <el-button v-if="row.status === 0" type="danger" size="small" @click="cancelExchange(row)">取消</el-button>
+                      <el-button v-if="row.status === 7" type="success" size="small" @click="confirmExchangeReceive(row)">确认收货</el-button>
+                      <el-button v-if="row.status === 0 || row.status === 1" type="danger" size="small" @click="cancelExchange(row)">取消</el-button>
                       <el-button size="small" @click="viewExchangeDetail(row)">详情</el-button>
                     </div>
                   </template>
@@ -442,7 +442,7 @@
           <h4>基本信息</h4>
           <div class="detail-row"><span class="label">订单号：</span><span class="mono">{{ orderDetail.orderNo }}</span></div>
           <div class="detail-row"><span class="label">订单状态：</span>
-            <el-tag :type="getOrderStatusTagType(orderDetail.status)" size="small">{{ getOrderStatusText(orderDetail.status) }}</el-tag>
+            <el-tag :type="getOrderStatusTagType(orderDetail.status)" size="small">{{ getOrderStatusText(orderDetail.status, orderDetail.exchangeStatus) }}</el-tag>
           </div>
           <div class="detail-row"><span class="label">下单时间：</span><span>{{ formatTime(orderDetail.createdAt) }}</span></div>
           <div v-if="orderDetail.payTime" class="detail-row"><span class="label">支付时间：</span><span>{{ formatTime(orderDetail.payTime) }}</span></div>
@@ -860,18 +860,50 @@
 
         <div class="exchange-new-product-section">
           <div class="section-title">
-            <span>选择换货商品</span>
-            <el-button type="primary" size="small" @click="goToSelectProduct">去选择商品</el-button>
+            <span>选择换货规格</span>
           </div>
-          <div class="new-product-input">
-            <el-form label-width="100px">
-              <el-form-item label="新商品ID">
-                <el-input v-model="newProductId" placeholder="请输入新商品ID" />
-              </el-form-item>
-              <el-form-item label="新SKU ID">
-                <el-input v-model="newSkuId" placeholder="请输入新SKU ID" />
-              </el-form-item>
-            </el-form>
+          <div class="new-product-selector">
+            <div class="exchange-original-tip">
+              <span>原规格：</span>
+              <span class="original-spec">
+                {{ exchangeOrderItems[0]?.specValues || '默认规格' }}
+                <span class="original-price">¥{{ Number(exchangeOrderItems[0]?.price || 0).toFixed(2) }}</span>
+              </span>
+            </div>
+            
+            <div class="sku-selector-section">
+              <div class="sku-title">请选择要换的规格</div>
+              <div v-if="exchangeSkuList.length > 0" class="sku-options">
+                <div
+                  v-for="sku in exchangeSkuList"
+                  :key="sku.id"
+                  :class="['sku-item', { selected: selectedNewSku?.id === sku.id }]"
+                  @click="selectExchangeSku(sku)"
+                >
+                  <span>{{ sku.specValues || '默认规格' }}</span>
+                  <span class="sku-price">¥{{ Number(sku.price).toFixed(2) }}</span>
+                </div>
+              </div>
+              <div v-else class="no-sku-tip">加载中...</div>
+            </div>
+            
+            <!-- 已选商品信息 -->
+            <div v-if="selectedNewSku" class="selected-product-info">
+              <div class="selected-title">已选规格</div>
+              <div class="selected-product-detail">
+                <img :src="selectedNewProduct?.image || defaultImg" class="selected-img" />
+                <div class="selected-info">
+                  <div class="selected-name">{{ selectedNewProduct?.name }}</div>
+                  <div class="selected-spec">规格：{{ selectedNewSku.specValues || '默认规格' }}</div>
+                  <div class="selected-price">
+                    单价：¥{{ Number(selectedNewSku.price).toFixed(2) }}
+                    <span class="price-diff" v-if="priceDifference > 0">需补差价 ¥{{ priceDifference.toFixed(2) }}</span>
+                    <span class="price-diff refund" v-else-if="priceDifference < 0">退差价 ¥{{ Math.abs(priceDifference).toFixed(2) }}</span>
+                    <span class="price-diff same" v-else>差价 ¥0.00</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -905,7 +937,7 @@
       </div>
       <template #footer>
         <el-button @click="exchangeDialogVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!canSubmitExchange" @click="confirmExchange">提交申请</el-button>
+        <el-button type="primary" @click="confirmExchange">提交申请</el-button>
       </template>
     </el-dialog>
 
@@ -991,10 +1023,10 @@
         <el-button v-if="currentExchangeDetail?.status === 1" type="primary" @click="showExchangeReturnShipDialog(currentExchangeDetail)">
           填写退货物流
         </el-button>
-        <el-button v-if="currentExchangeDetail?.status === 5" type="success" @click="confirmExchangeReceive(currentExchangeDetail)">
+        <el-button v-if="currentExchangeDetail?.status === 7" type="success" @click="confirmExchangeReceive(currentExchangeDetail)">
           确认收货
         </el-button>
-        <el-button v-if="currentExchangeDetail?.status === 0" type="danger" @click="cancelExchange(currentExchangeDetail)">
+        <el-button v-if="currentExchangeDetail?.status === 0 || currentExchangeDetail?.status === 1" type="danger" @click="cancelExchange(currentExchangeDetail)">
           取消申请
         </el-button>
       </template>
@@ -1402,8 +1434,6 @@ const canSubmitReturnShip = computed(() => {
 const exchangeDialogVisible = ref(false)
 const currentExchangeOrder = ref<any>(null)
 const exchangeOrderItems = ref<any[]>([])
-const newProductId = ref('')
-const newSkuId = ref('')
 const exchangeReasons = [
   '商品质量问题',
   '商品与描述不符',
@@ -1414,10 +1444,23 @@ const exchangeReasons = [
 ]
 const selectedExchangeReason = ref('')
 const customExchangeReason = ref('')
+
+// 换货商品选择
+const exchangeSkuList = ref<any[]>([])
+const selectedNewProduct = ref<any>(null)
+const selectedNewSku = ref<any>(null)
+
+const priceDifference = computed(() => {
+  if (!currentExchangeOrder.value || !exchangeOrderItems.value.length) return 0
+  const firstItem = exchangeOrderItems.value[0]
+  const originalPrice = Number(firstItem.price || 0) * Number(firstItem.quantity || 1)
+  const newPrice = Number(selectedNewSku.value?.price || 0) * Number(firstItem.quantity || 1)
+  return newPrice - originalPrice
+})
+
 const canSubmitExchange = computed(() => {
   return selectedExchangeReason.value !== '' &&
-         newProductId.value.trim() !== '' &&
-         newSkuId.value.trim() !== ''
+         selectedNewSku.value !== null
 })
 
 // 换货列表相关
@@ -1474,7 +1517,7 @@ async function viewOrderDetail(row: any) {
       params: { orderNo: row.orderNo }
     })
     if (res.data) {
-      orderDetail.value = res.data.order
+      orderDetail.value = { ...res.data.order, refundStatus: res.data.refundStatus, rejectReason: res.data.rejectReason, exchangeStatus: res.data.exchangeStatus }
       orderDetailItems.value = res.data.items || []
       orderCoupons.value = res.data.coupons || []
       if (orderDetail.value?.status >= 2) {
@@ -1599,46 +1642,115 @@ async function submitReturnShip() {
 }
 
 // ==================== 换货功能 ====================
-function applyExchange(row: any) {
+async function applyExchange(row: any) {
   currentExchangeOrder.value = row
   selectedExchangeReason.value = ''
   customExchangeReason.value = ''
-  newProductId.value = ''
-  newSkuId.value = ''
+  selectedNewSku.value = null
+  exchangeSkuList.value = []
   const items = row.items || []
   exchangeOrderItems.value = items
   exchangeDialogVisible.value = true
+  await loadExchangeSkuList()
 }
 
-function goToSelectProduct() {
-  ElMessage.info('请前往商品详情页选择规格后返回，或直接输入新商品ID和SKU ID')
+async function loadExchangeSkuList() {
+  if (!exchangeOrderItems.value.length) return
+  const firstItem = exchangeOrderItems.value[0]
+  const productId = firstItem?.productId
+  if (!productId) {
+    ElMessage.warning('无法获取商品信息')
+    return
+  }
+  try {
+    // 加载商品信息
+    const productRes = await request.get(`/product/${productId}`)
+    selectedNewProduct.value = productRes?.data || productRes?.data?.data || null
+    
+    // 加载SKU列表
+    const skuRes = await request.get('/sku/list', {
+      params: { productId }
+    })
+    let skus = skuRes?.data || skuRes?.data?.data || []
+    skus = Array.isArray(skus) ? skus : []
+    
+    // 如果没有SKU，用商品信息构造一个默认规格
+    if (skus.length === 0 && selectedNewProduct.value) {
+      skus = [{
+        id: 0,
+        productId: productId,
+        specValues: '默认规格',
+        price: selectedNewProduct.value.price || 0,
+        stock: selectedNewProduct.value.stock || 0
+      }]
+    }
+    
+    exchangeSkuList.value = skus
+    console.log('加载到的SKU列表:', exchangeSkuList.value)
+    
+    // 默认选中当前规格
+    const firstItem = exchangeOrderItems.value[0]
+    if (skus.length > 0) {
+      const currentSkuId = firstItem?.skuId
+      let defaultSku = null
+      if (currentSkuId) {
+        defaultSku = skus.find((s: any) => s.id === currentSkuId)
+      }
+      if (!defaultSku && firstItem?.specValues) {
+        defaultSku = skus.find((s: any) => (s.specValues || '默认规格') === firstItem.specValues)
+      }
+      if (!defaultSku) {
+        defaultSku = skus[0]
+      }
+      selectedNewSku.value = defaultSku
+    }
+  } catch (e: any) {
+    console.error('加载商品SKU失败', e)
+    ElMessage.error(e?.response?.data?.message || e?.message || '加载规格失败')
+  }
+}
+
+function selectExchangeSku(sku: any) {
+  selectedNewSku.value = sku
 }
 
 async function confirmExchange() {
-  if (!currentExchangeOrder.value || !canSubmitExchange.value) return
+  if (!currentExchangeOrder.value) return
+  if (!selectedNewSku.value) {
+    ElMessage.warning('请选择要换的规格')
+    return
+  }
+  if (!selectedExchangeReason.value) {
+    ElMessage.warning('请选择换货原因')
+    return
+  }
   try {
     const reason = selectedExchangeReason.value === 'other'
       ? (customExchangeReason.value.trim() || '其他')
       : selectedExchangeReason.value
 
     const firstItem = exchangeOrderItems.value[0]
+    const newSkuIdVal = selectedNewSku.value?.id
+    // id为0的是构造的默认规格，不传skuId
+    const newSkuIdParam = (newSkuIdVal && newSkuIdVal > 0) ? newSkuIdVal : null
     await request.post('/exchange/apply', null, {
       params: {
         userId: userStore.userInfo?.id,
         orderId: currentExchangeOrder.value.id,
         orderItemId: firstItem?.id,
-        originalProductId: firstItem?.productId,
-        originalSkuId: firstItem?.skuId,
-        newProductId: newProductId.value.trim(),
-        newSkuId: newSkuId.value.trim(),
-        reason
+        newProductId: selectedNewProduct.value?.id,
+        newSkuId: newSkuIdParam,
+        newQuantity: firstItem?.quantity || 1,
+        exchangeReason: reason
       }
     })
     ElMessage.success('换货申请已提交')
     exchangeDialogVisible.value = false
     loadOrders()
   } catch (e: any) {
-    ElMessage.error(e?.message || '申请失败')
+    const errMsg = e?.response?.data?.message || e?.message || '申请失败'
+    console.error('换货申请失败:', e)
+    ElMessage.error(errMsg)
   }
 }
 
@@ -1672,12 +1784,12 @@ function getExchangeStatusText(status: number) {
   const types: Record<number, string> = {
     0: '待审核',
     1: '待退货',
-    2: '退货中',
-    3: '待发货',
-    4: '已拒绝',
-    5: '待收货',
-    6: '已完成',
-    7: '已取消'
+    2: '已拒绝',
+    3: '已完成',
+    4: '已取消',
+    5: '退货中',
+    6: '待发货',
+    7: '已发货'
   }
   return types[status] || '未知'
 }
@@ -1686,12 +1798,12 @@ function getExchangeStatusTagType(status: number) {
   const types: Record<number, string> = {
     0: 'warning',
     1: 'primary',
-    2: 'warning',
-    3: 'info',
-    4: 'danger',
-    5: 'success',
-    6: 'success',
-    7: 'info'
+    2: 'danger',
+    3: 'success',
+    4: 'info',
+    5: 'warning',
+    6: 'primary',
+    7: 'success'
   }
   return types[status] || 'info'
 }
@@ -1882,7 +1994,10 @@ async function handleMessageClick(row: any) {
   }
 }
 
-function getOrderStatusText(status: number) {
+function getOrderStatusText(status: number, exchangeStatus?: number) {
+  if (status === 5 && exchangeStatus !== undefined && exchangeStatus !== null && exchangeStatus !== 2 && exchangeStatus !== 3 && exchangeStatus !== 4) {
+    return getExchangeStatusText(exchangeStatus)
+  }
   const types: Record<number, string> = {
     0: '待支付',
     1: '已支付',
@@ -1935,7 +2050,7 @@ async function loadOrders() {
     if (data?.list) {
       list = data.list.map((item: any) => {
         if (item.order) {
-          return { ...item.order, items: item.items, refundStatus: item.refundStatus, rejectReason: item.rejectReason, productName: item.items?.[0]?.productName, productImage: item.items?.[0]?.productImage }
+          return { ...item.order, items: item.items, refundStatus: item.refundStatus, rejectReason: item.rejectReason, exchangeStatus: item.exchangeStatus, productName: item.items?.[0]?.productName, productImage: item.items?.[0]?.productImage }
         }
         return item
       })
@@ -1975,7 +2090,7 @@ async function loadGroupOrders() {
     if (orderData?.list) {
       orders = orderData.list.map((item: any) => {
         if (item.order) {
-          return { ...item.order, items: item.items, productName: item.items?.[0]?.productName, productImage: item.items?.[0]?.productImage }
+          return { ...item.order, items: item.items, refundStatus: item.refundStatus, exchangeStatus: item.exchangeStatus, productName: item.items?.[0]?.productName, productImage: item.items?.[0]?.productImage }
         }
         return item
       })
@@ -3217,9 +3332,155 @@ onMounted(async () => {
       margin-bottom: 12px;
     }
 
-    .new-product-input {
-      .el-form-item {
+    .new-product-selector {
+      .exchange-original-tip {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        background: #fff;
+        border-radius: 6px;
         margin-bottom: 12px;
+        font-size: 13px;
+        color: #666;
+
+        .original-spec {
+          font-weight: 500;
+          color: #333;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .original-price {
+          color: #ff4400;
+          font-weight: 600;
+        }
+      }
+
+      .sku-selector-section {
+        .sku-title {
+          font-size: 13px;
+          font-weight: 600;
+          color: #333;
+          margin-bottom: 10px;
+        }
+
+        .sku-options {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+        }
+
+        .sku-item {
+          padding: 8px 16px;
+          border: 1px solid #e8e8e8;
+          border-radius: 6px;
+          background: #fff;
+          cursor: pointer;
+          font-size: 13px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          transition: all 0.2s;
+
+          &:hover {
+            border-color: #ff4400;
+          }
+
+          &.selected {
+            border-color: #ff4400;
+            background: #fff2e8;
+            color: #ff4400;
+          }
+
+          .sku-price {
+            color: #ff4400;
+            font-weight: 600;
+          }
+        }
+
+        .no-sku-tip {
+          color: #999;
+          font-size: 13px;
+          padding: 10px 0;
+        }
+      }
+
+      .selected-product-info {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px dashed #ffd591;
+
+        .selected-title {
+          font-size: 13px;
+          font-weight: 600;
+          color: #333;
+          margin-bottom: 10px;
+        }
+
+        .selected-product-detail {
+          display: flex;
+          gap: 12px;
+          align-items: center;
+          padding: 12px;
+          background: #fff;
+          border-radius: 6px;
+          border: 1px solid #ffd591;
+        }
+
+        .selected-img {
+          width: 60px;
+          height: 60px;
+          object-fit: cover;
+          border-radius: 4px;
+        }
+
+        .selected-info {
+          flex: 1;
+        }
+
+        .selected-name {
+          font-size: 13px;
+          color: #333;
+          font-weight: 500;
+          margin-bottom: 4px;
+        }
+
+        .selected-spec {
+          font-size: 12px;
+          color: #666;
+          margin-bottom: 6px;
+        }
+
+        .selected-price {
+          font-size: 14px;
+          color: #ff4400;
+          font-weight: 600;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+
+          .price-diff {
+            font-size: 12px;
+            font-weight: normal;
+            padding: 3px 8px;
+            border-radius: 4px;
+            background: #fff1f0;
+            color: #f5222d;
+
+            &.refund {
+              background: #f6ffed;
+              color: #52c41a;
+            }
+
+            &.same {
+              background: #f5f5f5;
+              color: #666;
+            }
+          }
+        }
       }
     }
   }

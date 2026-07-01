@@ -10,11 +10,13 @@ import com.shopping.common.entity.ProductSku;
 import com.shopping.common.entity.UserCoupon;
 import com.shopping.common.exception.BusinessException;
 import com.shopping.common.utils.Result;
+import com.shopping.order.entity.Exchange;
 import com.shopping.order.entity.Order;
 import com.shopping.order.entity.OrderItem;
 import com.shopping.order.entity.Refund;
 import com.shopping.order.feign.ProductClient;
 import com.shopping.order.mapper.CouponTemplateMapper;
+import com.shopping.order.mapper.ExchangeMapper;
 import com.shopping.order.mapper.MerchantCouponParticipationMapper;
 import com.shopping.order.mapper.OrderItemMapper;
 import com.shopping.order.mapper.OrderMapper;
@@ -62,6 +64,7 @@ public class OrderServiceImpl implements OrderService {
     @Autowired private CouponTemplateMapper couponTemplateMapper;
     @Autowired private MerchantCouponParticipationMapper merchantCouponParticipationMapper;
     @Autowired private RefundMapper refundMapper;
+    @Autowired private ExchangeMapper exchangeMapper;
     @Autowired private MessageService messageService;
     @Autowired(required = false) private ProductClient productClient;
 
@@ -496,6 +499,27 @@ public class OrderServiceImpl implements OrderService {
         vo.setCoupon(buildCouponInfo(order.getCouponId()));
         vo.setCoupons(buildCouponInfoList(order));
 
+        // 设置最新退款状态
+        List<Refund> refunds = refundMapper.selectList(
+                new LambdaQueryWrapper<Refund>().eq(Refund::getOrderId, order.getId())
+                        .orderByDesc(Refund::getApplyTime));
+        if (!refunds.isEmpty()) {
+            Refund latestRefund = refunds.get(0);
+            vo.setRefundStatus(latestRefund.getStatus());
+            if (latestRefund.getStatus() == 2 && latestRefund.getMerchantRemark() != null) {
+                vo.setRejectReason(latestRefund.getMerchantRemark());
+            }
+        }
+
+        // 设置最新换货状态
+        List<Exchange> exchanges = exchangeMapper.selectList(
+                new LambdaQueryWrapper<Exchange>().eq(Exchange::getOrderId, order.getId())
+                        .orderByDesc(Exchange::getApplyTime));
+        if (!exchanges.isEmpty()) {
+            Exchange latestExchange = exchanges.get(0);
+            vo.setExchangeStatus(latestExchange.getStatus());
+        }
+
         boolean isParent = order.getParentOrderId() != null && order.getParentOrderId() == 0L
                 && order.getOrderType() != null && order.getOrderType() == 1;
         if (isParent) {
@@ -788,6 +812,15 @@ public class OrderServiceImpl implements OrderService {
             for (Refund r : allRefunds) {
                 latestRefundMap.putIfAbsent(r.getOrderId(), r);
             }
+
+            // 查询每个订单的最新换货记录
+            List<Exchange> allExchanges = exchangeMapper.selectList(
+                    new LambdaQueryWrapper<Exchange>().in(Exchange::getOrderId, orderIds)
+                            .orderByDesc(Exchange::getApplyTime));
+            Map<Long, Exchange> latestExchangeMap = new HashMap<>();
+            for (Exchange e : allExchanges) {
+                latestExchangeMap.putIfAbsent(e.getOrderId(), e);
+            }
             
             for (Order order : orders) {
                 OrderVO vo = new OrderVO();
@@ -799,6 +832,10 @@ public class OrderServiceImpl implements OrderService {
                     if (latestRefund.getStatus() == 2 && latestRefund.getMerchantRemark() != null) {
                         vo.setRejectReason(latestRefund.getMerchantRemark());
                     }
+                }
+                Exchange latestExchange = latestExchangeMap.get(order.getId());
+                if (latestExchange != null) {
+                    vo.setExchangeStatus(latestExchange.getStatus());
                 }
                 voList.add(vo);
             }

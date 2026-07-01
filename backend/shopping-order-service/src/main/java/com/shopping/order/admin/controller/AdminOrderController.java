@@ -1,6 +1,7 @@
 package com.shopping.order.admin.controller;
 
 import com.shopping.common.utils.Result;
+import com.shopping.order.service.ExchangeService;
 import com.shopping.order.service.OrderService;
 import com.shopping.order.service.RefundService;
 import com.shopping.order.vo.OrderVO;
@@ -18,6 +19,8 @@ public class AdminOrderController {
     private OrderService orderService;
     @Autowired
     private RefundService refundService;
+    @Autowired
+    private ExchangeService exchangeService;
 
     @GetMapping("/list")
     public Result<Map<String, Object>> listOrders(
@@ -75,6 +78,31 @@ public class AdminOrderController {
         try {
             refundService.audit(refundId, approve, remark);
             return Result.success();
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
+    @GetMapping("/exchange/list")
+    public Result<Map<String, Object>> listExchanges(
+            @RequestParam(required = false) Integer status,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size) {
+        try {
+            return Result.success(exchangeService.listExchanges(status, page, size));
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
+    @GetMapping("/exchange/detail/{id}")
+    public Result<com.shopping.order.entity.Exchange> getExchangeDetail(@PathVariable Long id) {
+        try {
+            com.shopping.order.entity.Exchange exchange = exchangeService.getById(id);
+            if (exchange == null) {
+                return Result.error("换货记录不存在");
+            }
+            return Result.success(exchange);
         } catch (Exception e) {
             return Result.error(e.getMessage());
         }

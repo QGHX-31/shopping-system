@@ -129,6 +129,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '退款管理' }
       },
       {
+        path: 'exchange',
+        name: 'merchant-exchange',
+        component: () => import('@/views/merchant/ExchangeList.vue'),
+        meta: { title: '换货管理' }
+      },
+      {
         path: 'marketing/seckill',
         name: 'merchant-seckill',
         component: () => import('@/views/merchant/SeckillList.vue'),
@@ -176,6 +182,12 @@ const routes: RouteRecordRaw[] = [
         name: 'admin-refund-list',
         component: () => import('@/views/admin/RefundList.vue'),
         meta: { title: '退款管理' }
+      },
+      {
+        path: 'exchange/list',
+        name: 'admin-exchange-list',
+        component: () => import('@/views/admin/ExchangeList.vue'),
+        meta: { title: '换货管理' }
       },
       {
         path: 'product/list',
