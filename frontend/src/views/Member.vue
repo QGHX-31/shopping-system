@@ -2051,6 +2051,9 @@ watch(activeTab, (val) => {
   if (val === 'messages') {
     loadMessages()
   }
+  if (val === 'refunds') {
+    nextTick(() => loadRefunds())
+  }
 })
 
 watch(() => userStore.userInfo, (val) => {
