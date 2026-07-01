@@ -31,6 +31,11 @@ public class MessageServiceImpl implements MessageService {
         sendMessage(userId, title, content, 2);
     }
 
+    @Override
+    public void sendExchangeMessage(Long userId, String title, String content) {
+        sendMessage(userId, title, content, 3);
+    }
+
     private void sendMessage(Long userId, String title, String content, Integer type) {
         if (userId == null) {
             return;

@@ -623,6 +623,58 @@ CREATE TABLE `order_review` (
     INDEX `idx_merchant_id` (`merchant_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单评价表';
 
+-- 换货申请表
+DROP TABLE IF EXISTS `exchange`;
+CREATE TABLE `exchange` (
+    `id`                      BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '换货ID',
+    `exchange_no`             VARCHAR(50) NOT NULL UNIQUE COMMENT '换货单号',
+    `order_id`                BIGINT NOT NULL COMMENT '原订单ID',
+    `order_item_id`           BIGINT NOT NULL COMMENT '原订单明细ID',
+    `user_id`                 BIGINT NOT NULL COMMENT '用户ID',
+    `merchant_id`             BIGINT NOT NULL COMMENT '商家ID',
+    `exchange_reason`         VARCHAR(500) COMMENT '换货原因',
+    `voucher_images`          VARCHAR(1000) DEFAULT NULL COMMENT '凭证图片，逗号分隔',
+    `original_order_status`   TINYINT DEFAULT NULL COMMENT '申请换货时的原订单状态，用于拒绝时恢复',
+    -- 原商品信息
+    `original_product_id`     BIGINT NOT NULL COMMENT '原商品ID',
+    `original_sku_id`         BIGINT COMMENT '原SKU ID',
+    `original_product_name`   VARCHAR(200) COMMENT '原商品名称',
+    `original_spec_values`    VARCHAR(500) COMMENT '原规格值',
+    `original_quantity`       INT NOT NULL DEFAULT 1 COMMENT '原数量',
+    `original_price`          DECIMAL(10,2) COMMENT '原商品单价',
+    -- 新商品信息
+    `new_product_id`          BIGINT NOT NULL COMMENT '新商品ID',
+    `new_sku_id`              BIGINT COMMENT '新SKU ID',
+    `new_product_name`        VARCHAR(200) COMMENT '新商品名称',
+    `new_spec_values`         VARCHAR(500) COMMENT '新规格值',
+    `new_quantity`            INT NOT NULL DEFAULT 1 COMMENT '新数量',
+    `new_price`               DECIMAL(10,2) COMMENT '新商品单价',
+    `price_difference`        DECIMAL(10,2) DEFAULT 0 COMMENT '价格差异（新-原），正数需补差价，负数退差价',
+    -- 退货物流信息
+    `return_logistics_company` VARCHAR(100) DEFAULT NULL COMMENT '退货物流公司',
+    `return_tracking_no`      VARCHAR(100) DEFAULT NULL COMMENT '退货物流单号',
+    `return_ship_time`        DATETIME DEFAULT NULL COMMENT '退货发货时间',
+    `return_receive_time`     DATETIME DEFAULT NULL COMMENT '商家确认收货时间',
+    -- 换货发货物流信息
+    `exchange_logistics_company` VARCHAR(100) DEFAULT NULL COMMENT '换货发货物流公司',
+    `exchange_tracking_no`    VARCHAR(100) DEFAULT NULL COMMENT '换货发货物流单号',
+    `exchange_ship_time`      DATETIME DEFAULT NULL COMMENT '换货发货时间',
+    `exchange_receive_time`   DATETIME DEFAULT NULL COMMENT '用户确认收货时间',
+    -- 状态与备注
+    `status`                  TINYINT NOT NULL DEFAULT 0 COMMENT '状态：0待审核 1待退货 2已拒绝 3已完成 4已取消 5退货中 6待发货 7已发货',
+    `merchant_remark`         VARCHAR(500) COMMENT '商家备注/拒绝原因',
+    -- 时间记录
+    `apply_time`              DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '申请时间',
+    `audit_time`              DATETIME COMMENT '审核时间',
+    `complete_time`           DATETIME COMMENT '换货完成时间',
+    `created_at`              DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at`              DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX `idx_order_id` (`order_id`),
+    INDEX `idx_user_id` (`user_id`),
+    INDEX `idx_merchant_id` (`merchant_id`),
+    INDEX `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='换货申请表';
+
 -- ============================================================
 -- 第五部分：RBAC 权限（运营后台）
 -- ============================================================

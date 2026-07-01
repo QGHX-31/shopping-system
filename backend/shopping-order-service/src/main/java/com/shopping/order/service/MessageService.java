@@ -8,6 +8,8 @@ public interface MessageService {
 
     void sendRefundMessage(Long userId, String title, String content);
 
+    void sendExchangeMessage(Long userId, String title, String content);
+
     Map<String, Object> listUserMessages(Long userId, Integer type, Integer page, Integer size);
 
     void markAsRead(Long id, Long userId);

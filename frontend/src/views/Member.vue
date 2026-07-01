@@ -131,6 +131,7 @@
                       <el-button v-if="row.refundStatus === 2 && row.rejectReason" type="info" size="small" @click="showRejectReason(row)">拒绝原因</el-button>
                       <el-button v-if="row.status === 3 && !row.hasReview" type="warning" size="small" @click="openReviewDialog(row)">评价</el-button>
                       <el-button v-if="row.status === 3 && row.hasReview" type="info" size="small" @click="viewReview(row)">查看评价</el-button>
+                      <el-button v-if="row.status === 3" type="success" size="small" @click="applyExchange(row)">申请换货</el-button>
                       <el-button v-if="row.status === 3 || row.status === 4 || row.status === 6" type="danger" size="small" @click="deleteOrder(row)">删除</el-button>
                       <el-button size="small" @click="viewOrderDetail(row)">详情</el-button>
                     </div>
@@ -233,6 +234,67 @@
                 :total="refundTotal"
                 layout="total, prev, pager, next, jumper"
                 @current-change="loadRefunds"
+              />
+            </div>
+          </el-tab-pane>
+          <el-tab-pane label="我的换货" name="exchanges">
+            <div class="exchange-status-tabs">
+              <div
+                v-for="tab in exchangeStatusTabs"
+                :key="tab.value"
+                :class="['status-tab', { active: exchangeStatus === tab.value }]"
+                @click="exchangeStatus = tab.value; loadExchanges()"
+              >
+                {{ tab.label }}
+              </div>
+            </div>
+            <div class="exchanges-list">
+              <el-table :data="exchangeList" v-loading="loadingExchanges" border>
+                <el-table-column label="换货单号" prop="exchangeNo" width="200" />
+                <el-table-column label="原商品" width="180">
+                  <template #default="{ row }">
+                    <div class="exchange-product-col">
+                      <img :src="row.originalProductImage || defaultImg" class="exchange-product-img" />
+                      <span>{{ row.originalProductName }}</span>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="新商品" width="180">
+                  <template #default="{ row }">
+                    <div class="exchange-product-col">
+                      <img :src="row.newProductImage || defaultImg" class="exchange-product-img" />
+                      <span>{{ row.newProductName }}</span>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="状态" width="120">
+                  <template #default="{ row }">
+                    <el-tag :type="getExchangeStatusTagType(row.status)" size="small">
+                      {{ getExchangeStatusText(row.status) }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="申请时间" prop="applyTime" width="160" />
+                <el-table-column label="操作" width="240" fixed="right">
+                  <template #default="{ row }">
+                    <div class="action-buttons">
+                      <el-button v-if="row.status === 1" type="primary" size="small" @click="showExchangeReturnShipDialog(row)">填写退货物流</el-button>
+                      <el-button v-if="row.status === 5" type="success" size="small" @click="confirmExchangeReceive(row)">确认收货</el-button>
+                      <el-button v-if="row.status === 0" type="danger" size="small" @click="cancelExchange(row)">取消</el-button>
+                      <el-button size="small" @click="viewExchangeDetail(row)">详情</el-button>
+                    </div>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <el-empty v-if="!loadingExchanges && exchangeList.length === 0" description="暂无换货记录" />
+            </div>
+            <div v-if="exchangeTotal > 0" class="pagination">
+              <el-pagination
+                v-model:current-page="exchangePage"
+                :page-size="exchangePageSize"
+                :total="exchangeTotal"
+                layout="total, prev, pager, next, jumper"
+                @current-change="loadExchanges"
               />
             </div>
           </el-tab-pane>
@@ -770,6 +832,199 @@
       </template>
     </el-dialog>
 
+    <!-- 换货申请对话框 -->
+    <el-dialog v-model="exchangeDialogVisible" title="申请换货" width="700px">
+      <div class="exchange-dialog">
+        <div class="exchange-products-section">
+          <div class="section-title">
+            <span>原商品信息</span>
+          </div>
+          <div class="exchange-product-list">
+            <div
+              v-for="(item, idx) in exchangeOrderItems"
+              :key="idx"
+              class="exchange-product-item"
+            >
+              <img :src="item.productImage || defaultImg" class="exchange-product-img" />
+              <div class="exchange-product-info">
+                <div class="exchange-product-name">{{ item.productName }}</div>
+                <div class="exchange-product-spec" v-if="item.specValues">{{ item.specValues }}</div>
+                <div class="exchange-product-price">
+                  <span>¥{{ Number(item.price).toFixed(2) }}</span>
+                  <span> × {{ item.quantity }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="exchange-new-product-section">
+          <div class="section-title">
+            <span>选择换货商品</span>
+            <el-button type="primary" size="small" @click="goToSelectProduct">去选择商品</el-button>
+          </div>
+          <div class="new-product-input">
+            <el-form label-width="100px">
+              <el-form-item label="新商品ID">
+                <el-input v-model="newProductId" placeholder="请输入新商品ID" />
+              </el-form-item>
+              <el-form-item label="新SKU ID">
+                <el-input v-model="newSkuId" placeholder="请输入新SKU ID" />
+              </el-form-item>
+            </el-form>
+          </div>
+        </div>
+
+        <p class="dialog-tip">请选择换货原因：</p>
+        <div class="reason-options">
+          <div
+            v-for="reason in exchangeReasons"
+            :key="reason"
+            :class="['reason-item', { selected: selectedExchangeReason === reason }]"
+            @click="selectedExchangeReason = reason"
+          >
+            {{ reason }}
+          </div>
+          <div
+            :class="['reason-item', { selected: selectedExchangeReason === 'other' }]"
+            @click="selectedExchangeReason = 'other'"
+          >
+            其他
+          </div>
+        </div>
+        <div v-if="selectedExchangeReason === 'other'" class="custom-reason">
+          <el-input
+            v-model="customExchangeReason"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入换货原因..."
+            maxlength="200"
+            show-word-limit
+          />
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="exchangeDialogVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!canSubmitExchange" @click="confirmExchange">提交申请</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 换货详情对话框 -->
+    <el-dialog v-model="exchangeDetailVisible" title="换货详情" width="700px">
+      <div class="exchange-detail" v-if="currentExchangeDetail">
+        <div class="exchange-products-compare">
+          <div class="product-section original">
+            <h4>原商品</h4>
+            <div class="product-card">
+              <img :src="currentExchangeDetail.originalProductImage || defaultImg" class="product-img" />
+              <div class="product-info">
+                <div class="product-name">{{ currentExchangeDetail.originalProductName }}</div>
+                <div class="product-spec" v-if="currentExchangeDetail.originalSpecValues">{{ currentExchangeDetail.originalSpecValues }}</div>
+                <div class="product-price">¥{{ Number(currentExchangeDetail.originalPrice || 0).toFixed(2) }}</div>
+              </div>
+            </div>
+          </div>
+          <div class="product-section new">
+            <h4>新商品</h4>
+            <div class="product-card">
+              <img :src="currentExchangeDetail.newProductImage || defaultImg" class="product-img" />
+              <div class="product-info">
+                <div class="product-name">{{ currentExchangeDetail.newProductName }}</div>
+                <div class="product-spec" v-if="currentExchangeDetail.newSpecValues">{{ currentExchangeDetail.newSpecValues }}</div>
+                <div class="product-price">¥{{ Number(currentExchangeDetail.newPrice || 0).toFixed(2) }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <el-descriptions :column="2" border style="margin-top: 20px;">
+          <el-descriptions-item label="换货单号">{{ currentExchangeDetail.exchangeNo }}</el-descriptions-item>
+          <el-descriptions-item label="订单ID">{{ currentExchangeDetail.orderId }}</el-descriptions-item>
+          <el-descriptions-item label="换货状态">
+            <el-tag :type="getExchangeStatusTagType(currentExchangeDetail.status)" size="small">
+              {{ getExchangeStatusText(currentExchangeDetail.status) }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="换货原因">{{ currentExchangeDetail.exchangeReason }}</el-descriptions-item>
+          <el-descriptions-item label="申请时间">{{ currentExchangeDetail.applyTime }}</el-descriptions-item>
+        </el-descriptions>
+
+        <!-- 退货物流信息 -->
+        <div v-if="currentExchangeDetail.returnLogisticsCompany" class="return-logistics">
+          <h4>退货物流信息</h4>
+          <el-descriptions :column="2" border>
+            <el-descriptions-item label="物流公司">{{ currentExchangeDetail.returnLogisticsCompany }}</el-descriptions-item>
+            <el-descriptions-item label="物流单号">{{ currentExchangeDetail.returnTrackingNo }}</el-descriptions-item>
+            <el-descriptions-item v-if="currentExchangeDetail.returnShipTime" label="发货时间" span="2">
+              {{ currentExchangeDetail.returnShipTime }}
+            </el-descriptions-item>
+          </el-descriptions>
+        </div>
+
+        <!-- 换货发货物流信息 -->
+        <div v-if="currentExchangeDetail.exchangeLogisticsCompany" class="exchange-logistics">
+          <h4>换货发货物流信息</h4>
+          <el-descriptions :column="2" border>
+            <el-descriptions-item label="物流公司">{{ currentExchangeDetail.exchangeLogisticsCompany }}</el-descriptions-item>
+            <el-descriptions-item label="物流单号">{{ currentExchangeDetail.exchangeTrackingNo }}</el-descriptions-item>
+            <el-descriptions-item v-if="currentExchangeDetail.exchangeShipTime" label="发货时间" span="2">
+              {{ currentExchangeDetail.exchangeShipTime }}
+            </el-descriptions-item>
+          </el-descriptions>
+        </div>
+
+        <!-- 换货进度 -->
+        <div class="exchange-progress">
+          <h4>换货进度</h4>
+          <el-steps :active="getExchangeProgress(currentExchangeDetail)" finish-status="success" align-center>
+            <el-step title="提交申请" :description="currentExchangeDetail.applyTime" />
+            <el-step title="商家审核" :description="currentExchangeDetail.reviewTime || ''" />
+            <el-step title="退货发货" :description="currentExchangeDetail.returnShipTime || ''" />
+            <el-step title="商家收货" :description="currentExchangeDetail.returnReceiveTime || ''" />
+            <el-step title="换货发货" :description="currentExchangeDetail.exchangeShipTime || ''" />
+            <el-step title="确认收货" :description="currentExchangeDetail.exchangeReceiveTime || ''" />
+          </el-steps>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="exchangeDetailVisible = false">关闭</el-button>
+        <el-button v-if="currentExchangeDetail?.status === 1" type="primary" @click="showExchangeReturnShipDialog(currentExchangeDetail)">
+          填写退货物流
+        </el-button>
+        <el-button v-if="currentExchangeDetail?.status === 5" type="success" @click="confirmExchangeReceive(currentExchangeDetail)">
+          确认收货
+        </el-button>
+        <el-button v-if="currentExchangeDetail?.status === 0" type="danger" @click="cancelExchange(currentExchangeDetail)">
+          取消申请
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 换货退货物流对话框 -->
+    <el-dialog v-model="exchangeReturnShipDialogVisible" title="填写退货物流" width="450px">
+      <div class="return-ship-form">
+        <el-form label-width="100px">
+          <el-form-item label="物流公司">
+            <el-select v-model="exchangeReturnLogisticsCompany" placeholder="请选择物流公司">
+              <el-option
+                v-for="exp in logisticsCompanies"
+                :key="exp.code"
+                :label="exp.name"
+                :value="exp.name"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="物流单号">
+            <el-input v-model="exchangeReturnTrackingNo" placeholder="请输入物流单号" />
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <el-button @click="exchangeReturnShipDialogVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!canSubmitExchangeReturnShip" @click="submitExchangeReturnShip">确认发货</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 订单评价弹窗 -->
     <el-dialog v-model="reviewDialogVisible" :title="isViewReview ? '查看评价' : '订单评价'" width="640px">
       <div class="review-dialog" v-if="currentReviewOrder">
@@ -1143,6 +1398,60 @@ const canSubmitReturnShip = computed(() => {
   return returnLogisticsCompany.value !== '' && returnTrackingNo.value.trim() !== ''
 })
 
+// 换货申请相关
+const exchangeDialogVisible = ref(false)
+const currentExchangeOrder = ref<any>(null)
+const exchangeOrderItems = ref<any[]>([])
+const newProductId = ref('')
+const newSkuId = ref('')
+const exchangeReasons = [
+  '商品质量问题',
+  '商品与描述不符',
+  '商品损坏/有瑕疵',
+  '收到错误商品',
+  '尺码/规格不合适',
+  '颜色/款式不满意',
+]
+const selectedExchangeReason = ref('')
+const customExchangeReason = ref('')
+const canSubmitExchange = computed(() => {
+  return selectedExchangeReason.value !== '' &&
+         newProductId.value.trim() !== '' &&
+         newSkuId.value.trim() !== ''
+})
+
+// 换货列表相关
+const exchangeStatusTabs = [
+  { label: '全部', value: -1 },
+  { label: '待审核', value: 0 },
+  { label: '待退货', value: 1 },
+  { label: '退货中', value: 2 },
+  { label: '待发货', value: 3 },
+  { label: '待收货', value: 5 },
+  { label: '已完成', value: 6 },
+  { label: '已拒绝', value: 4 },
+  { label: '已取消', value: 7 },
+]
+const exchangeStatus = ref<number>(-1)
+const exchangeList = ref<any[]>([])
+const loadingExchanges = ref(false)
+const exchangePage = ref(1)
+const exchangePageSize = ref(10)
+const exchangeTotal = ref(0)
+
+// 换货详情
+const exchangeDetailVisible = ref(false)
+const currentExchangeDetail = ref<any>(null)
+
+// 换货退货物流
+const exchangeReturnShipDialogVisible = ref(false)
+const currentExchangeReturn = ref<any>(null)
+const exchangeReturnLogisticsCompany = ref('')
+const exchangeReturnTrackingNo = ref('')
+const canSubmitExchangeReturnShip = computed(() => {
+  return exchangeReturnLogisticsCompany.value !== '' && exchangeReturnTrackingNo.value.trim() !== ''
+})
+
 // 订单详情
 const orderDetailVisible = ref(false)
 const orderDetail = ref<any>(null)
@@ -1287,6 +1596,203 @@ async function submitReturnShip() {
   } catch (e: any) {
     ElMessage.error(e?.message || '提交失败')
   }
+}
+
+// ==================== 换货功能 ====================
+function applyExchange(row: any) {
+  currentExchangeOrder.value = row
+  selectedExchangeReason.value = ''
+  customExchangeReason.value = ''
+  newProductId.value = ''
+  newSkuId.value = ''
+  const items = row.items || []
+  exchangeOrderItems.value = items
+  exchangeDialogVisible.value = true
+}
+
+function goToSelectProduct() {
+  ElMessage.info('请前往商品详情页选择规格后返回，或直接输入新商品ID和SKU ID')
+}
+
+async function confirmExchange() {
+  if (!currentExchangeOrder.value || !canSubmitExchange.value) return
+  try {
+    const reason = selectedExchangeReason.value === 'other'
+      ? (customExchangeReason.value.trim() || '其他')
+      : selectedExchangeReason.value
+
+    const firstItem = exchangeOrderItems.value[0]
+    await request.post('/exchange/apply', null, {
+      params: {
+        userId: userStore.userInfo?.id,
+        orderId: currentExchangeOrder.value.id,
+        orderItemId: firstItem?.id,
+        originalProductId: firstItem?.productId,
+        originalSkuId: firstItem?.skuId,
+        newProductId: newProductId.value.trim(),
+        newSkuId: newSkuId.value.trim(),
+        reason
+      }
+    })
+    ElMessage.success('换货申请已提交')
+    exchangeDialogVisible.value = false
+    loadOrders()
+  } catch (e: any) {
+    ElMessage.error(e?.message || '申请失败')
+  }
+}
+
+async function loadExchanges() {
+  if (!userStore.userInfo?.id) return
+  loadingExchanges.value = true
+  try {
+    const res = await request.get('/exchange/user', {
+      params: {
+        userId: userStore.userInfo.id,
+        page: exchangePage.value,
+        size: exchangePageSize.value
+      }
+    })
+    let list = (res.data?.list || res.data?.records || []) as any[]
+    const totalCount = res.data?.total || 0
+    if (exchangeStatus.value !== -1) {
+      list = list.filter(item => item.status === exchangeStatus.value)
+    }
+    exchangeList.value = list
+    exchangeTotal.value = totalCount
+  } catch (e) {
+    console.error('加载换货列表失败', e)
+    exchangeList.value = []
+  } finally {
+    loadingExchanges.value = false
+  }
+}
+
+function getExchangeStatusText(status: number) {
+  const types: Record<number, string> = {
+    0: '待审核',
+    1: '待退货',
+    2: '退货中',
+    3: '待发货',
+    4: '已拒绝',
+    5: '待收货',
+    6: '已完成',
+    7: '已取消'
+  }
+  return types[status] || '未知'
+}
+
+function getExchangeStatusTagType(status: number) {
+  const types: Record<number, string> = {
+    0: 'warning',
+    1: 'primary',
+    2: 'warning',
+    3: 'info',
+    4: 'danger',
+    5: 'success',
+    6: 'success',
+    7: 'info'
+  }
+  return types[status] || 'info'
+}
+
+async function viewExchangeDetail(row: any) {
+  try {
+    const res = await request.get('/exchange/detail', {
+      params: { id: row.id }
+    })
+    if (res.data) {
+      currentExchangeDetail.value = res.data
+      exchangeDetailVisible.value = true
+    }
+  } catch (e) {
+    ElMessage.error('加载换货详情失败')
+  }
+}
+
+function showExchangeReturnShipDialog(row: any) {
+  currentExchangeReturn.value = row
+  exchangeReturnLogisticsCompany.value = ''
+  exchangeReturnTrackingNo.value = ''
+  exchangeReturnShipDialogVisible.value = true
+  exchangeDetailVisible.value = false
+}
+
+async function submitExchangeReturnShip() {
+  if (!currentExchangeReturn.value || !canSubmitExchangeReturnShip.value) return
+  try {
+    await request.post('/exchange/return-ship', null, {
+      params: {
+        exchangeId: currentExchangeReturn.value.id,
+        userId: userStore.userInfo?.id,
+        logisticsCompany: exchangeReturnLogisticsCompany.value,
+        trackingNo: exchangeReturnTrackingNo.value.trim()
+      }
+    })
+    ElMessage.success('退货物流已提交')
+    exchangeReturnShipDialogVisible.value = false
+    loadExchanges()
+  } catch (e: any) {
+    ElMessage.error(e?.message || '提交失败')
+  }
+}
+
+async function confirmExchangeReceive(row: any) {
+  try {
+    await ElMessageBox.confirm('确认收到换货商品？', '确认收货', {
+      type: 'success',
+      confirmButtonText: '确认',
+      cancelButtonText: '取消'
+    })
+    await request.post('/exchange/user-confirm', null, {
+      params: {
+        exchangeId: row.id,
+        userId: userStore.userInfo?.id
+      }
+    })
+    ElMessage.success('确认收货成功')
+    exchangeDetailVisible.value = false
+    loadExchanges()
+  } catch (e: any) {
+    if (e !== 'cancel') {
+      ElMessage.error(e?.message || '操作失败')
+    }
+  }
+}
+
+async function cancelExchange(row: any) {
+  try {
+    await ElMessageBox.confirm('确定要取消换货申请吗？', '取消确认', {
+      type: 'warning',
+      confirmButtonText: '确定取消',
+      cancelButtonText: '保留申请'
+    })
+    await request.post('/exchange/cancel', null, {
+      params: {
+        exchangeId: row.id,
+        userId: userStore.userInfo?.id
+      }
+    })
+    ElMessage.success('换货申请已取消')
+    exchangeDetailVisible.value = false
+    loadExchanges()
+  } catch (e: any) {
+    if (e !== 'cancel') {
+      ElMessage.error(e?.message || '取消失败')
+    }
+  }
+}
+
+function getExchangeProgress(exchange: any) {
+  if (!exchange) return 0
+  const status = exchange.status
+  if (status === 0) return 0
+  if (status === 1 || status === 4) return 1
+  if (status === 2) return 2
+  if (status === 3) return 3
+  if (status === 5) return 4
+  if (status === 6) return 5
+  return 0
 }
 
 watch(() => route.query.tab, (val) => {
@@ -2100,6 +2606,9 @@ watch(activeTab, (val) => {
   if (val === 'refunds') {
     nextTick(() => loadRefunds())
   }
+  if (val === 'exchanges') {
+    nextTick(() => loadExchanges())
+  }
   if (val === 'settings') {
     fillProfileForm()
   }
@@ -2638,6 +3147,258 @@ onMounted(async () => {
 
 .return-ship-form {
   padding: 10px 0;
+}
+
+.exchange-status-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.exchanges-list {
+  .action-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .exchange-product-col {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .exchange-product-img {
+      width: 40px;
+      height: 40px;
+      object-fit: cover;
+      border-radius: 4px;
+    }
+
+    span {
+      font-size: 13px;
+      color: #333;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+}
+
+.exchange-dialog {
+  .exchange-products-section {
+    margin-bottom: 20px;
+    padding: 16px;
+    background: #f9f9f9;
+    border-radius: 8px;
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 12px;
+    }
+  }
+
+  .exchange-new-product-section {
+    margin-bottom: 20px;
+    padding: 16px;
+    background: #fff7e6;
+    border-radius: 8px;
+    border: 1px solid #ffd591;
+
+    .section-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 12px;
+    }
+
+    .new-product-input {
+      .el-form-item {
+        margin-bottom: 12px;
+      }
+    }
+  }
+
+  .exchange-product-list {
+    max-height: 180px;
+    overflow-y: auto;
+  }
+
+  .exchange-product-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    background: #fff;
+    border-radius: 6px;
+    margin-bottom: 8px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  .exchange-product-img {
+    width: 50px;
+    height: 50px;
+    object-fit: cover;
+    border-radius: 4px;
+  }
+
+  .exchange-product-info {
+    flex: 1;
+    min-width: 0;
+
+    .exchange-product-name {
+      font-size: 13px;
+      color: #333;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .exchange-product-spec {
+      font-size: 12px;
+      color: #999;
+      margin-top: 4px;
+    }
+
+    .exchange-product-price {
+      font-size: 12px;
+      color: #ff4400;
+      margin-top: 4px;
+    }
+  }
+
+  .dialog-tip {
+    margin: 0 0 16px 0;
+    font-size: 14px;
+    color: #666;
+  }
+
+  .reason-options {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .reason-item {
+    padding: 10px 16px;
+    border: 1px solid #dcdfe6;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+    font-size: 13px;
+    color: #606266;
+
+    &:hover {
+      border-color: #ff4400;
+      color: #ff4400;
+    }
+
+    &.selected {
+      border-color: #ff4400;
+      background: #fff0eb;
+      color: #ff4400;
+      font-weight: 500;
+    }
+  }
+
+  .custom-reason {
+    margin-top: 16px;
+  }
+}
+
+.exchange-detail {
+  .exchange-products-compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+
+    .product-section {
+      h4 {
+        margin: 0 0 12px 0;
+        font-size: 14px;
+        color: #333;
+      }
+
+      .product-card {
+        display: flex;
+        gap: 12px;
+        padding: 12px;
+        background: #f5f5f5;
+        border-radius: 8px;
+
+        .product-img {
+          width: 60px;
+          height: 60px;
+          object-fit: cover;
+          border-radius: 4px;
+        }
+
+        .product-info {
+          flex: 1;
+
+          .product-name {
+            font-size: 13px;
+            color: #333;
+            margin-bottom: 6px;
+          }
+
+          .product-spec {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 6px;
+          }
+
+          .product-price {
+            font-size: 14px;
+            color: #ff4400;
+            font-weight: bold;
+          }
+        }
+      }
+
+      &.original .product-card {
+        background: #fff0f0;
+        border: 1px solid #ffccc7;
+      }
+
+      &.new .product-card {
+        background: #f0f5ff;
+        border: 1px solid #adc6ff;
+      }
+    }
+  }
+
+  .return-logistics,
+  .exchange-logistics {
+    margin-top: 20px;
+
+    h4 {
+      margin: 0 0 12px 0;
+      font-size: 15px;
+      color: #333;
+    }
+  }
+
+  .exchange-progress {
+    margin-top: 20px;
+
+    h4 {
+      margin: 0 0 16px 0;
+      font-size: 15px;
+      color: #333;
+    }
+  }
 }
 
 .refund-products-section {
