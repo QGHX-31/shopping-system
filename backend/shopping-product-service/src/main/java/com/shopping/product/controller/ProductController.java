@@ -105,4 +105,13 @@ public class ProductController {
     public Result<Long> getProductCount() {
         return Result.success(productService.getProductCount());
     }
+
+    @GetMapping("/merchant/list")
+    public Result<Map<String, Object>> listMerchantProducts(
+            @RequestParam Long merchantId,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "100") Integer size) {
+        Map<String, Object> result = productService.listMerchantProducts(merchantId, page, size);
+        return Result.success(result);
+    }
 }

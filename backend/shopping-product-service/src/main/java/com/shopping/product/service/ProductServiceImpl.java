@@ -4,9 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.shopping.common.entity.Product;
+import com.shopping.common.entity.ProductSku;
 import com.shopping.common.exception.BusinessException;
 import com.shopping.common.utils.RedisUtil;
 import com.shopping.product.mapper.ProductMapper;
+import com.shopping.product.mapper.SkuMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +23,9 @@ public class ProductServiceImpl implements ProductService {
 
     @Resource
     private ProductMapper productMapper;
+
+    @Resource
+    private SkuMapper skuMapper;
 
     @Resource
     private RedisUtil redisUtil;
@@ -183,5 +188,52 @@ public class ProductServiceImpl implements ProductService {
     public Long getProductCount() {
         return productMapper.selectCount(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.shopping.common.entity.Product>()
                 .eq(com.shopping.common.entity.Product::getStatus, 1));
+    }
+
+    @Override
+    public Map<String, Object> listMerchantProducts(Long merchantId, Integer page, Integer size) {
+        page = page == null || page < 1 ? 1 : page;
+        size = size == null || size < 1 ? 10 : size;
+
+        LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<>();
+        if (merchantId != null) {
+            wrapper.eq(Product::getMerchantId, merchantId);
+        }
+        wrapper.orderByDesc(Product::getCreatedAt);
+
+        IPage<Product> productPage = new Page<>(page, size);
+        IPage<Product> resultPage = productMapper.selectPage(productPage, wrapper);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("list", resultPage.getRecords());
+        result.put("total", resultPage.getTotal());
+        result.put("page", resultPage.getCurrent());
+        result.put("size", resultPage.getSize());
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public void updateProductTotalStock(Long productId) {
+        if (productId == null) return;
+
+        LambdaQueryWrapper<ProductSku> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ProductSku::getProductId, productId);
+        wrapper.eq(ProductSku::getStatus, 1);
+        List<ProductSku> skus = skuMapper.selectList(wrapper);
+
+        int totalStock = 0;
+        if (skus != null && !skus.isEmpty()) {
+            for (ProductSku sku : skus) {
+                totalStock += sku.getStock() == null ? 0 : sku.getStock();
+            }
+        }
+
+        Product product = new Product();
+        product.setId(productId);
+        product.setStock(totalStock);
+        productMapper.updateById(product);
+
+        redisUtil.delete(PRODUCT_CACHE_KEY + productId);
     }
 }

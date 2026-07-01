@@ -21,4 +21,8 @@ public interface ProductService {
     Product addSales(Long productId, Integer quantity);
 
     Long getProductCount();
+
+    Map<String, Object> listMerchantProducts(Long merchantId, Integer page, Integer size);
+
+    void updateProductTotalStock(Long productId);
 }

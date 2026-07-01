@@ -52,14 +52,21 @@
     </div>
     <el-dialog v-model="showAddDialog" title="添加SKU" width="500px">
       <el-form :model="addForm" label-width="80px">
-        <el-form-item label="商品ID">
-          <el-input v-model="addForm.productId" type="number" />
+        <el-form-item label="选择商品">
+          <el-select v-model="addForm.productId" placeholder="请选择商品" style="width: 100%;">
+            <el-option
+              v-for="p in productList"
+              :key="p.id"
+              :label="p.name"
+              :value="p.id"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="SKU编码">
           <el-input v-model="addForm.skuCode" />
         </el-form-item>
         <el-form-item label="规格">
-          <el-input v-model="addForm.specValues" />
+          <el-input v-model="addForm.specValues" placeholder="如：颜色:红色;尺寸:XL" />
         </el-form-item>
         <el-form-item label="价格">
           <el-input v-model="addForm.price" type="number" />
@@ -139,7 +146,7 @@ const showEditDialog = ref(false)
 const editingSku = ref<any>(null)
 
 const addForm = reactive({
-  productId: 0,
+  productId: null,
   skuCode: '',
   specValues: '',
   price: 0,
@@ -155,7 +162,7 @@ async function loadProducts() {
   const merchantId = merchantStore.merchantInfo?.id
   if (!merchantId) return
   try {
-    const res = await request.get('/merchant/product/list', { params: { merchantId, page: 1, size: 100 } })
+    const res = await request.get('/product/merchant/list', { params: { merchantId, page: 1, size: 100 } })
     productList.value = res.data.list || []
   } catch (e) {
     console.error('加载商品列表失败', e)
@@ -165,6 +172,8 @@ async function loadProducts() {
 async function loadSkus() {
   try {
     const params: any = { page: page.value, size: size.value }
+    const merchantId = merchantStore.merchantInfo?.id
+    if (merchantId) params.merchantId = merchantId
     if (productId.value) params.productId = productId.value
     const res = await request.get('/sku/list/all', { params })
     tableData.value = res.data.list
@@ -180,12 +189,16 @@ function handlePageChange(val: number) {
 }
 
 async function addSku() {
+  if (!addForm.productId) {
+    ElMessage.warning('请选择商品')
+    return
+  }
   try {
     const merchantId = merchantStore.merchantInfo?.id
     await request.post('/sku/add', { ...addForm, merchantId })
     ElMessage.success('添加成功')
     showAddDialog.value = false
-    Object.assign(addForm, { productId: 0, skuCode: '', specValues: '', price: 0, originalPrice: 0, stock: 0 })
+    Object.assign(addForm, { productId: null, skuCode: '', specValues: '', price: 0, originalPrice: 0, stock: 0 })
     loadSkus()
   } catch (e) {
     ElMessage.error('添加失败')

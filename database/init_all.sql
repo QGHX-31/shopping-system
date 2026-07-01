@@ -171,14 +171,24 @@ CREATE TABLE `product` (
 -- 商品SKU表
 DROP TABLE IF EXISTS `product_sku`;
 CREATE TABLE `product_sku` (
-    `id`          BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'SKU ID',
-    `product_id`  BIGINT NOT NULL COMMENT '商品ID',
-    `spec_values` VARCHAR(255) COMMENT '规格值，JSON格式',
-    `price`       DECIMAL(10,2) NOT NULL COMMENT 'SKU价格',
-    `stock`       INT NOT NULL DEFAULT 0 COMMENT '库存',
-    `image`       VARCHAR(255) COMMENT 'SKU图片',
-    `created_at`  DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    INDEX `idx_product_id` (`product_id`)
+    `id`              BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'SKU ID',
+    `product_id`      BIGINT NOT NULL COMMENT '商品ID',
+    `merchant_id`     BIGINT COMMENT '商家ID',
+    `sku_code`        VARCHAR(100) COMMENT 'SKU编码',
+    `spec_values`     VARCHAR(500) COMMENT '规格值',
+    `price`           DECIMAL(10,2) NOT NULL COMMENT 'SKU价格',
+    `original_price`  DECIMAL(10,2) COMMENT '原价',
+    `stock`           INT NOT NULL DEFAULT 0 COMMENT '库存',
+    `locked_stock`    INT DEFAULT 0 COMMENT '锁定库存',
+    `sales_count`     INT DEFAULT 0 COMMENT '销量',
+    `weight`          DECIMAL(10,2) DEFAULT 0 COMMENT '重量(kg)',
+    `image`           VARCHAR(255) COMMENT 'SKU图片',
+    `status`          TINYINT DEFAULT 1 COMMENT '状态：0禁用 1正常',
+    `created_at`      DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at`      DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX `idx_product_id` (`product_id`),
+    INDEX `idx_merchant_id` (`merchant_id`),
+    INDEX `idx_sku_code` (`sku_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='商品SKU表';
 
 -- 购物车表
