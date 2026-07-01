@@ -7,7 +7,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shopping.common.entity.CouponTemplate;
 import com.shopping.common.entity.Product;
 import com.shopping.common.entity.UserCoupon;
+import com.shopping.common.entity.MerchantCouponParticipation;
 import com.shopping.marketing.mapper.CouponTemplateMapper;
+import com.shopping.marketing.mapper.MerchantCouponParticipationMapper;
 import com.shopping.marketing.mapper.ProductMapper;
 import com.shopping.marketing.mapper.UserCouponMapper;
 import org.springframework.stereotype.Service;
@@ -32,6 +34,9 @@ public class CouponServiceImpl implements CouponService {
     @Resource
     private ProductMapper productMapper;
     
+    @Resource
+    private MerchantCouponParticipationMapper merchantCouponParticipationMapper;
+    
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private void fillTemplateInfo(List<UserCoupon> coupons) {
@@ -54,6 +59,29 @@ public class CouponServiceImpl implements CouponService {
         List<CouponTemplate> templates = couponTemplateMapper.selectBatchIds(templateIds);
         Map<Long, CouponTemplate> templateMap = templates.stream()
             .collect(Collectors.toMap(CouponTemplate::getId, t -> t));
+        
+        Set<Long> productTemplateIds = new HashSet<>();
+        for (UserCoupon coupon : coupons) {
+            CouponTemplate template = templateMap.get(coupon.getTemplateId());
+            if (template != null && template.getScopeType() != null && template.getScopeType() == 3) {
+                productTemplateIds.add(template.getId());
+            }
+        }
+        
+        Map<Long, List<Long>> productIdsMap = new HashMap<>();
+        if (!productTemplateIds.isEmpty()) {
+            LambdaQueryWrapper<MerchantCouponParticipation> wrapper = new LambdaQueryWrapper<>();
+            wrapper.in(MerchantCouponParticipation::getTemplateId, productTemplateIds)
+                   .eq(MerchantCouponParticipation::getStatus, 2)
+                   .isNotNull(MerchantCouponParticipation::getProductId);
+            List<MerchantCouponParticipation> participations = merchantCouponParticipationMapper.selectList(wrapper);
+            for (MerchantCouponParticipation p : participations) {
+                if (p.getProductId() != null) {
+                    productIdsMap.computeIfAbsent(p.getTemplateId(), k -> new ArrayList<>()).add(p.getProductId());
+                }
+            }
+        }
+        
         for (UserCoupon coupon : coupons) {
             CouponTemplate template = templateMap.get(coupon.getTemplateId());
             if (template != null) {
@@ -62,7 +90,17 @@ public class CouponServiceImpl implements CouponService {
                     : (template.getMerchantId() != null ? 2 : 1));
                 coupon.setMutuallyExclusive(template.getMutuallyExclusive() != null ? template.getMutuallyExclusive() : 1);
                 coupon.setScopeType(template.getScopeType());
-                coupon.setScopeIds(template.getScopeIds());
+                
+                if (template.getScopeType() != null && template.getScopeType() == 3) {
+                    List<Long> productIds = productIdsMap.get(template.getId());
+                    if (productIds != null && !productIds.isEmpty()) {
+                        coupon.setScopeIds(productIds.stream().map(String::valueOf).collect(Collectors.joining(",")));
+                    } else {
+                        coupon.setScopeIds(template.getScopeIds());
+                    }
+                } else {
+                    coupon.setScopeIds(template.getScopeIds());
+                }
             } else {
                 if (coupon.getCouponLevel() == null) {
                     coupon.setCouponLevel(coupon.getMerchantId() != null ? 2 : 1);
@@ -352,16 +390,31 @@ public class CouponServiceImpl implements CouponService {
             return result;
         }
         
+        Integer couponLevel = template.getCouponLevel();
+        if (couponLevel == null) {
+            couponLevel = template.getMerchantId() != null ? 2 : 1;
+        }
+        
+        if (template.getMerchantId() != null && merchantId == null) {
+            result.put("reason", "仅限指定店铺使用");
+            return result;
+        }
+        
+        if (template.getMerchantId() != null && merchantId != null 
+            && !template.getMerchantId().equals(merchantId)) {
+            result.put("reason", "仅限指定店铺使用");
+            return result;
+        }
+        
         Integer scopeType = template.getScopeType();
         if (scopeType != null) {
-            if (scopeType == 2) {
-                if (merchantId != null && template.getMerchantId() != null && !template.getMerchantId().equals(merchantId)) {
-                    result.put("reason", "仅限指定店铺使用");
-                    return result;
-                }
-            } else if (scopeType == 3) {
-                List<Long> scopeProductIds = parseScopeIds(template.getScopeIds());
-                if (scopeProductIds != null && !scopeProductIds.isEmpty() && productIds != null && !productIds.isEmpty()) {
+            if (scopeType == 3) {
+                List<Long> scopeProductIds = getCouponProductIds(template.getId());
+                if (scopeProductIds != null && !scopeProductIds.isEmpty()) {
+                    if (productIds == null || productIds.isEmpty()) {
+                        result.put("reason", "仅限指定商品使用");
+                        return result;
+                    }
                     boolean hasMatch = productIds.stream().anyMatch(scopeProductIds::contains);
                     if (!hasMatch) {
                         result.put("reason", "仅限指定商品使用");
@@ -394,6 +447,20 @@ public class CouponServiceImpl implements CouponService {
         } catch (Exception e) {
             return null;
         }
+    }
+    
+    private List<Long> getCouponProductIds(Long templateId) {
+        if (templateId == null) return null;
+        LambdaQueryWrapper<MerchantCouponParticipation> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(MerchantCouponParticipation::getTemplateId, templateId)
+               .eq(MerchantCouponParticipation::getStatus, 2)
+               .isNotNull(MerchantCouponParticipation::getProductId);
+        List<MerchantCouponParticipation> list = merchantCouponParticipationMapper.selectList(wrapper);
+        if (list == null || list.isEmpty()) return null;
+        return list.stream()
+            .map(MerchantCouponParticipation::getProductId)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toList());
     }
 
     @Override

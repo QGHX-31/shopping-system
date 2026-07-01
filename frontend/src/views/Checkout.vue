@@ -638,6 +638,26 @@ function isCouponUsable(coupon: any): boolean {
     if (baseAmount < minAmount) return false
   }
 
+  const level = coupon.couponLevel || 1
+  if ((level === 2 || level === 3) && coupon.merchantId != null) {
+    const merchantIds = [...new Set(orderItems.value.map(i => i.merchantId).filter(Boolean))]
+    if (!merchantIds.includes(coupon.merchantId)) {
+      couponUnusableReasons.value[coupon.id] = '店铺不匹配'
+      return false
+    }
+  }
+
+  if (coupon.scopeType === 3 && coupon.scopeIds) {
+    const couponProductIds = String(coupon.scopeIds).split(',').map(Number).filter(Boolean)
+    if (couponProductIds.length > 0) {
+      const hasMatch = productIds.value.some(pid => couponProductIds.includes(pid))
+      if (!hasMatch) {
+        couponUnusableReasons.value[coupon.id] = '商品不匹配'
+        return false
+      }
+    }
+  }
+
   const reason = couponUnusableReasons.value[coupon.id]
   if (reason) return false
 

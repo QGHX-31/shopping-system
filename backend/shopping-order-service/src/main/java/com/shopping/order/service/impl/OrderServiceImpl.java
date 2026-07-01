@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.shopping.common.entity.Address;
 import com.shopping.common.entity.CouponTemplate;
+import com.shopping.common.entity.MerchantCouponParticipation;
 import com.shopping.common.entity.Product;
 import com.shopping.common.entity.ProductSku;
 import com.shopping.common.entity.UserCoupon;
@@ -13,6 +14,7 @@ import com.shopping.order.entity.Order;
 import com.shopping.order.entity.OrderItem;
 import com.shopping.order.feign.ProductClient;
 import com.shopping.order.mapper.CouponTemplateMapper;
+import com.shopping.order.mapper.MerchantCouponParticipationMapper;
 import com.shopping.order.mapper.OrderItemMapper;
 import com.shopping.order.mapper.OrderMapper;
 import com.shopping.order.mapper.UserCouponMapper;
@@ -56,6 +58,7 @@ public class OrderServiceImpl implements OrderService {
     @Autowired private OrderItemMapper orderItemMapper;
     @Autowired private UserCouponMapper userCouponMapper;
     @Autowired private CouponTemplateMapper couponTemplateMapper;
+    @Autowired private MerchantCouponParticipationMapper merchantCouponParticipationMapper;
     @Autowired private MessageService messageService;
     @Autowired(required = false) private ProductClient productClient;
 
@@ -218,6 +221,26 @@ public class OrderServiceImpl implements OrderService {
                     int level = tpl != null && tpl.getCouponLevel() != null ? tpl.getCouponLevel()
                             : (tpl != null && tpl.getMerchantId() != null ? 2 : 1);
                     Long tplMerchantId = tpl != null ? tpl.getMerchantId() : null;
+
+                    if ((level == 2 || level == 3) && tplMerchantId != null) {
+                        if (!byMerchant.containsKey(tplMerchantId)) {
+                            throw new BusinessException("优惠券「" + uc.getName() + "」仅限指定店铺使用");
+                        }
+                    }
+
+                    if (tpl != null && tpl.getScopeType() != null && tpl.getScopeType() == 3) {
+                        List<Long> scopeProductIds = getCouponProductIds(tpl.getId());
+                        if (scopeProductIds != null && !scopeProductIds.isEmpty()) {
+                            List<Long> orderProductIds = request.getItems().stream()
+                                .map(OrderItemRequest::getProductId)
+                                .filter(Objects::nonNull)
+                                .collect(Collectors.toList());
+                            boolean hasMatch = orderProductIds.stream().anyMatch(scopeProductIds::contains);
+                            if (!hasMatch) {
+                                throw new BusinessException("优惠券「" + uc.getName() + "」仅限指定商品使用");
+                            }
+                        }
+                    }
 
                     BigDecimal baseAmount;
                     if (level == 2 && tplMerchantId != null) {
@@ -906,6 +929,20 @@ public class OrderServiceImpl implements OrderService {
             orderMap.merge(item.getProductId(), item.getQuantity(), Integer::sum);
         }
         return requestMap.equals(orderMap);
+    }
+
+    private List<Long> getCouponProductIds(Long templateId) {
+        if (templateId == null) return null;
+        LambdaQueryWrapper<MerchantCouponParticipation> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(MerchantCouponParticipation::getTemplateId, templateId)
+               .eq(MerchantCouponParticipation::getStatus, 2)
+               .isNotNull(MerchantCouponParticipation::getProductId);
+        List<MerchantCouponParticipation> list = merchantCouponParticipationMapper.selectList(wrapper);
+        if (list == null || list.isEmpty()) return null;
+        return list.stream()
+            .map(MerchantCouponParticipation::getProductId)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toList());
     }
 
     private String generateOrderNo() {
