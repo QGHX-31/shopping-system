@@ -124,7 +124,7 @@ CREATE TABLE `merchant` (
     `password`        VARCHAR(100) COMMENT '密码（BCrypt）',
     `user_id`         BIGINT COMMENT '关联用户ID',
     `shop_name`       VARCHAR(100) NOT NULL COMMENT '店铺名称',
-    `shop_logo`       VARCHAR(255) COMMENT '店铺Logo',
+    `logo`            VARCHAR(255) COMMENT '店铺Logo',
     `contact_name`    VARCHAR(50) COMMENT '联系人姓名',
     `contact_phone`   VARCHAR(20) COMMENT '联系电话',
     `email`           VARCHAR(100) COMMENT '联系邮箱',
@@ -147,12 +147,13 @@ CREATE TABLE `product` (
     `category_id` BIGINT COMMENT '分类ID',
     `name`        VARCHAR(200) NOT NULL COMMENT '商品名称',
     `sub_title`   VARCHAR(500) COMMENT '副标题',
+    `brand`       VARCHAR(100) COMMENT '品牌',
     `image_url`   VARCHAR(255) COMMENT '主图URL',
-    `images`      VARCHAR(1000) COMMENT '图片列表，逗号分隔',
+    `detail_images` VARCHAR(1000) COMMENT '详情图片，逗号分隔',
     `price`       DECIMAL(10,2) NOT NULL COMMENT '售价',
     `original_price` DECIMAL(10,2) COMMENT '原价',
     `stock`       INT NOT NULL DEFAULT 0 COMMENT '库存',
-    `sales`       INT DEFAULT 0 COMMENT '销量',
+    `sales_count` INT DEFAULT 0 COMMENT '销量',
     `description` TEXT COMMENT '商品详情',
     `status`      TINYINT DEFAULT 1 COMMENT '状态：0下架 1上架 2售罄',
     `is_hot`      TINYINT DEFAULT 0 COMMENT '是否热销：0否 1是',
@@ -163,7 +164,7 @@ CREATE TABLE `product` (
     INDEX `idx_merchant_id` (`merchant_id`),
     INDEX `idx_category_id` (`category_id`),
     INDEX `idx_status` (`status`),
-    INDEX `idx_sales` (`sales`),
+    INDEX `idx_sales_count` (`sales_count`),
     INDEX `idx_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='商品表';
 
@@ -212,32 +213,56 @@ CREATE TABLE `favorite` (
 -- 第二部分：优惠券/营销活动
 -- ============================================================
 
--- 优惠券模板表
+-- 平台优惠券模板表
+DROP TABLE IF EXISTS `platform_coupon_template`;
+CREATE TABLE `platform_coupon_template` (
+    `id`               BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '模板ID',
+    `name`             VARCHAR(100) NOT NULL COMMENT '优惠券名称',
+    `type`             TINYINT NOT NULL COMMENT '类型：1满减券 2折扣券',
+    `discount_amount`  DECIMAL(10,2) COMMENT '优惠金额（满减券）',
+    `min_amount`       DECIMAL(10,2) DEFAULT 0 COMMENT '最低使用金额',
+    `total_count`      INT DEFAULT 0 COMMENT '发放总量',
+    `remaining_count`  INT DEFAULT 0 COMMENT '剩余数量',
+    `per_user_limit`   INT DEFAULT 1 COMMENT '每人限领数量',
+    `start_time`       DATETIME COMMENT '领取开始时间',
+    `end_time`         DATETIME COMMENT '领取结束时间',
+    `description`      VARCHAR(500) COMMENT '使用说明',
+    `status`           TINYINT DEFAULT 1 COMMENT '状态：0禁用 1启用',
+    `created_at`       DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at`       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX `idx_status` (`status`),
+    INDEX `idx_start_time` (`start_time`),
+    INDEX `idx_end_time` (`end_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='平台优惠券模板表';
+
+-- 店铺优惠券模板表
 DROP TABLE IF EXISTS `coupon_template`;
 CREATE TABLE `coupon_template` (
     `id`               BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '模板ID',
     `name`             VARCHAR(100) NOT NULL COMMENT '优惠券名称',
-    `coupon_type`      TINYINT NOT NULL COMMENT '类型：1满减券 2折扣券 3无门槛券',
-    `coupon_level`     TINYINT DEFAULT 1 COMMENT '层级：1平台券 2店铺券',
-    `merchant_id`      BIGINT COMMENT '商家ID（店铺券时必填）',
+    `merchant_id`      BIGINT NOT NULL COMMENT '商家ID',
+    `type`             TINYINT NOT NULL COMMENT '类型：1满减券 2折扣券',
     `discount_amount`  DECIMAL(10,2) COMMENT '优惠金额（满减券）',
-    `discount_rate`    DECIMAL(5,2) COMMENT '折扣比例（折扣券，如0.8表示8折）',
     `min_amount`       DECIMAL(10,2) DEFAULT 0 COMMENT '最低使用金额',
-    `total_count`      INT DEFAULT 0 COMMENT '发放总量，0表示不限',
-    `used_count`       INT DEFAULT 0 COMMENT '已使用数量',
-    `receive_count`    INT DEFAULT 0 COMMENT '已领取数量',
+    `total_count`      INT DEFAULT 0 COMMENT '发放总量',
+    `remaining_count`  INT DEFAULT 0 COMMENT '剩余数量',
     `per_user_limit`   INT DEFAULT 1 COMMENT '每人限领数量',
-    `valid_start_time` DATETIME COMMENT '有效开始时间',
-    `valid_end_time`   DATETIME COMMENT '有效结束时间',
-    `valid_days`       INT COMMENT '领取后有效天数（与起止时间二选一）',
-    `description`      VARCHAR(500) COMMENT '使用说明',
+    `start_time`       DATETIME COMMENT '领取开始时间',
+    `end_time`         DATETIME COMMENT '领取结束时间',
     `status`           TINYINT DEFAULT 1 COMMENT '状态：0禁用 1启用',
+    `description`      VARCHAR(500) COMMENT '使用说明',
+    `scope_type`       TINYINT DEFAULT 2 COMMENT '适用范围：1全场 2指定商品 3指定分类',
+    `scope_ids`        VARCHAR(500) COMMENT '适用范围ID，逗号分隔',
+    `coupon_level`     TINYINT DEFAULT 2 COMMENT '优惠券层级：1平台券 2店铺券',
+    `mutually_exclusive` TINYINT DEFAULT 1 COMMENT '是否互斥：0否 1是',
+    `user_type`        TINYINT DEFAULT 0 COMMENT '用户类型：0全部用户 1新用户 2会员',
+    `member_level`     INT COMMENT '会员等级（user_type=2时生效）',
     `created_at`       DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at`       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX `idx_merchant_id` (`merchant_id`),
     INDEX `idx_status` (`status`),
     INDEX `idx_coupon_level` (`coupon_level`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='优惠券模板表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='店铺优惠券模板表';
 
 -- 用户优惠券表
 DROP TABLE IF EXISTS `user_coupon`;
@@ -245,16 +270,16 @@ CREATE TABLE `user_coupon` (
     `id`               BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'ID',
     `user_id`          BIGINT NOT NULL COMMENT '用户ID',
     `template_id`      BIGINT NOT NULL COMMENT '模板ID',
+    `coupon_code`      VARCHAR(50) COMMENT '优惠券码',
     `name`             VARCHAR(100) NOT NULL COMMENT '优惠券名称（快照）',
-    `coupon_type`      TINYINT NOT NULL COMMENT '类型',
-    `merchant_id`      BIGINT COMMENT '商家ID',
+    `type`             TINYINT NOT NULL COMMENT '类型',
     `discount_amount`  DECIMAL(10,2) COMMENT '优惠金额',
-    `discount_rate`    DECIMAL(5,2) COMMENT '折扣比例',
     `min_amount`       DECIMAL(10,2) DEFAULT 0 COMMENT '最低使用金额',
     `status`           TINYINT DEFAULT 0 COMMENT '状态：0未使用 1已使用 2已过期',
     `receive_time`     DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '领取时间',
-    `used_time`        DATETIME COMMENT '使用时间',
+    `use_time`         DATETIME COMMENT '使用时间',
     `expire_time`      DATETIME COMMENT '过期时间',
+    `order_no`         VARCHAR(50) COMMENT '使用订单号',
     `lock_order_no`    VARCHAR(50) COMMENT '锁定订单号',
     `created_at`       DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX `idx_user_id` (`user_id`),
@@ -294,10 +319,13 @@ CREATE TABLE `merchant_seckill_participation` (
     `product_id`       BIGINT NOT NULL COMMENT '商品ID',
     `sku_id`           BIGINT COMMENT 'SKU ID',
     `seckill_price`    DECIMAL(10,2) NOT NULL COMMENT '秒杀价',
-    `seckill_stock`    INT NOT NULL DEFAULT 0 COMMENT '秒杀库存',
-    `sold_count`       INT DEFAULT 0 COMMENT '已售数量',
+    `original_price`   DECIMAL(10,2) COMMENT '原价',
+    `total_stock`      INT DEFAULT 0 COMMENT '总库存',
+    `available_stock`  INT DEFAULT 0 COMMENT '可用库存',
+    `limit_per_user`   INT DEFAULT 1 COMMENT '每人限购数量',
     `status`           TINYINT DEFAULT 0 COMMENT '状态：0待审核 1已通过 2已拒绝',
     `created_at`       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX `idx_template_id` (`template_id`),
     INDEX `idx_merchant_id` (`merchant_id`),
     INDEX `idx_product_id` (`product_id`)
@@ -325,11 +353,11 @@ DROP TABLE IF EXISTS `platform_group_template`;
 CREATE TABLE `platform_group_template` (
     `id`               BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '模板ID',
     `name`             VARCHAR(200) NOT NULL COMMENT '活动名称',
+    `required_num`     INT NOT NULL DEFAULT 3 COMMENT '成团人数',
+    `discount_rate`    DECIMAL(5,2) COMMENT '折扣比例',
     `start_time`       DATETIME NOT NULL COMMENT '开始时间',
     `end_time`         DATETIME NOT NULL COMMENT '结束时间',
-    `group_size`       INT NOT NULL DEFAULT 3 COMMENT '成团人数',
     `group_duration`   INT DEFAULT 24 COMMENT '成团有效期(小时)',
-    `discount_rate`    DECIMAL(5,2) COMMENT '折扣比例',
     `description`      VARCHAR(500) COMMENT '活动描述',
     `banner`           VARCHAR(255) COMMENT '活动banner',
     `status`           TINYINT DEFAULT 1 COMMENT '状态：0禁用，1启用',
@@ -340,20 +368,65 @@ CREATE TABLE `platform_group_template` (
     INDEX `idx_end_time` (`end_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='平台拼团活动模板表';
 
--- 商家拼团参与
+-- 商家拼团参与表
+DROP TABLE IF EXISTS `merchant_group_participation`;
+CREATE TABLE `merchant_group_participation` (
+    `id`               BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '参与ID',
+    `template_id`      BIGINT NOT NULL COMMENT '活动模板ID',
+    `merchant_id`      BIGINT NOT NULL COMMENT '商家ID',
+    `product_id`       BIGINT NOT NULL COMMENT '商品ID',
+    `sku_id`           BIGINT COMMENT 'SKU ID',
+    `group_price`      DECIMAL(10,2) NOT NULL COMMENT '拼团价',
+    `original_price`   DECIMAL(10,2) COMMENT '原价',
+    `total_stock`      INT DEFAULT 0 COMMENT '总库存',
+    `available_stock`  INT DEFAULT 0 COMMENT '可用库存',
+    `status`           TINYINT DEFAULT 0 COMMENT '状态：0待审核 1已通过 2已拒绝',
+    `created_at`       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_template_id` (`template_id`),
+    INDEX `idx_merchant_id` (`merchant_id`),
+    INDEX `idx_product_id` (`product_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='商家拼团参与表';
+
+-- 商家优惠券参与表
 DROP TABLE IF EXISTS `merchant_coupon_participation`;
 CREATE TABLE `merchant_coupon_participation` (
     `id`               BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '参与ID',
     `template_id`      BIGINT NOT NULL COMMENT '活动模板ID',
     `merchant_id`      BIGINT NOT NULL COMMENT '商家ID',
     `product_id`       BIGINT NOT NULL COMMENT '商品ID',
-    `group_price`      DECIMAL(10,2) NOT NULL COMMENT '拼团价',
     `status`           TINYINT DEFAULT 0 COMMENT '状态：0待审核 1已通过 2已拒绝',
     `created_at`       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX `idx_template_id` (`template_id`),
     INDEX `idx_merchant_id` (`merchant_id`),
     INDEX `idx_product_id` (`product_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='商家拼团参与表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='商家优惠券参与表';
+
+-- 团购活动表
+DROP TABLE IF EXISTS `group_buy_activity`;
+CREATE TABLE `group_buy_activity` (
+    `id`               BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '活动ID',
+    `name`             VARCHAR(200) NOT NULL COMMENT '活动名称',
+    `merchant_id`      BIGINT NOT NULL COMMENT '商家ID',
+    `product_id`       BIGINT NOT NULL COMMENT '商品ID',
+    `sku_id`           BIGINT COMMENT 'SKU ID',
+    `group_price`      DECIMAL(10,2) NOT NULL COMMENT '拼团价',
+    `original_price`   DECIMAL(10,2) COMMENT '原价',
+    `required_num`     INT NOT NULL DEFAULT 3 COMMENT '成团人数',
+    `total_stock`      INT DEFAULT 0 COMMENT '总库存',
+    `available_stock`  INT DEFAULT 0 COMMENT '可用库存',
+    `start_time`       DATETIME COMMENT '开始时间',
+    `end_time`         DATETIME COMMENT '结束时间',
+    `group_duration`   INT DEFAULT 24 COMMENT '成团有效期(小时)',
+    `status`           TINYINT DEFAULT 0 COMMENT '状态：0未开始 1进行中 2已结束 3已取消',
+    `description`      VARCHAR(500) COMMENT '活动描述',
+    `created_at`       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_merchant_id` (`merchant_id`),
+    INDEX `idx_product_id` (`product_id`),
+    INDEX `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='团购活动表';
 
 -- 拼团团队表
 DROP TABLE IF EXISTS `group_buy_team`;
