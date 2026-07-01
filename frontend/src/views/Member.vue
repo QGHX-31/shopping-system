@@ -131,6 +131,7 @@
                       <el-button v-if="row.refundStatus === 2 && row.rejectReason" type="info" size="small" @click="showRejectReason(row)">拒绝原因</el-button>
                       <el-button v-if="row.status === 3 && !row.hasReview" type="warning" size="small" @click="openReviewDialog(row)">评价</el-button>
                       <el-button v-if="row.status === 3 && row.hasReview" type="info" size="small" @click="viewReview(row)">查看评价</el-button>
+                      <el-button v-if="row.status === 3 && row.refundStatus !== 2" type="warning" size="small" @click="applyRefund(row)">申请退款</el-button>
                       <el-button v-if="row.status === 3" type="success" size="small" @click="applyExchange(row)">申请换货</el-button>
                       <el-button v-if="row.status === 3 || row.status === 4 || row.status === 6" type="danger" size="small" @click="deleteOrder(row)">删除</el-button>
                       <el-button size="small" @click="viewOrderDetail(row)">详情</el-button>
