@@ -111,6 +111,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '商品管理' }
       },
       {
+        path: 'product/add',
+        name: 'merchant-product-add',
+        component: () => import('@/views/merchant/ProductEdit.vue'),
+        meta: { title: '新增商品' }
+      },
+      {
+        path: 'product/edit/:id',
+        name: 'merchant-product-edit',
+        component: () => import('@/views/merchant/ProductEdit.vue'),
+        meta: { title: '编辑商品' }
+      },
+      {
         path: 'sku',
         name: 'merchant-sku',
         component: () => import('@/views/merchant/SkuList.vue'),

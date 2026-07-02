@@ -109,77 +109,93 @@ public class SeckillServiceImpl implements SeckillService {
         String stockKey = SECKILL_STOCK_KEY + productId;
         String userLimitKey = SECKILL_USER_LIMIT_KEY + productId + ":" + userId;
         
-        Long stock = redisUtil.get(stockKey, Long.class);
-        if (stock == null) {
-            stock = (long) product.getAvailableStock();
-            redisUtil.set(stockKey, stock);
+        // 确保Redis中有库存（使用纯字符串格式，让Lua脚本能正确处理）
+        String stockStr = redisUtil.getRawString(stockKey);
+        if (stockStr == null) {
+            stockStr = String.valueOf(product.getAvailableStock());
+            redisUtil.setRawString(stockKey, stockStr);
         }
         
-        if (stock < quantity) {
+        // 原子扣减库存（使用Lua脚本防止超卖）
+        // 返回值：>=0 表示扣减成功，-1 表示库存不足，-2 表示key不存在
+        Long newStock = redisUtil.atomicDecrementStrict(stockKey, quantity);
+        if (newStock == -1L) {
             result.put("success", false);
             result.put("message", "Insufficient stock");
             return result;
         }
-        
-        Integer userLimit = product.getLimitPerUser();
-        Long userBought = redisUtil.get(userLimitKey, Long.class);
-        if (userBought == null) {
-            LambdaQueryWrapper<SeckillOrder> orderWrapper = new LambdaQueryWrapper<>();
-            orderWrapper.eq(SeckillOrder::getUserId, userId)
-                       .eq(SeckillOrder::getProductId, productId);
-            userBought = (long) seckillOrderMapper.selectCount(orderWrapper);
+        if (newStock == -2L) {
+            // 库存key不存在，重新设置后再试一次
+            redisUtil.setRawString(stockKey, String.valueOf(product.getAvailableStock()));
+            newStock = redisUtil.atomicDecrementStrict(stockKey, quantity);
+            if (newStock == -1L || newStock == -2L) {
+                result.put("success", false);
+                result.put("message", "Insufficient stock");
+                return result;
+            }
         }
         
-        if (userBought + quantity > userLimit) {
-            result.put("success", false);
-            result.put("message", "Purchase limit exceeded");
+        try {
+            // 用户限购校验
+            Integer userLimit = product.getLimitPerUser();
+            Long userBought = redisUtil.get(userLimitKey, Long.class);
+            if (userBought == null) {
+                LambdaQueryWrapper<SeckillOrder> orderWrapper = new LambdaQueryWrapper<>();
+                orderWrapper.eq(SeckillOrder::getUserId, userId)
+                           .eq(SeckillOrder::getProductId, productId);
+                userBought = (long) seckillOrderMapper.selectCount(orderWrapper);
+            }
+            
+            if (userBought + quantity > userLimit) {
+                // 超过用户限购，回滚库存
+                redisUtil.atomicIncrement(stockKey, quantity);
+                result.put("success", false);
+                result.put("message", "Purchase limit exceeded");
+                return result;
+            }
+            
+            redisUtil.increment(userLimitKey, quantity);
+            
+            SeckillOrder order = new SeckillOrder();
+            order.setOrderNo("SK" + System.currentTimeMillis() + new Random().nextInt(1000));
+            order.setUserId(userId);
+            order.setActivityId(activityId);
+            order.setProductId(productId);
+            order.setSkuId(skuId);
+            order.setQuantity(quantity);
+            order.setSeckillPrice(product.getSeckillPrice());
+            order.setTotalAmount(product.getSeckillPrice().multiply(new java.math.BigDecimal(quantity)));
+            order.setStatus(0);
+            order.setCreatedAt(LocalDateTime.now());
+            seckillOrderMapper.insert(order);
+            
+            product.setAvailableStock(newStock.intValue());
+            product.setSalesCount(product.getSalesCount() + quantity);
+            seckillProductMapper.updateById(product);
+
+            Map<String, Object> mqBody = new HashMap<>();
+            mqBody.put("orderNo", order.getOrderNo());
+            mqBody.put("userId", userId);
+            mqBody.put("productId", productId);
+            mqBody.put("skuId", skuId);
+            mqBody.put("quantity", quantity);
+            mqBody.put("activityId", activityId);
+            mqBody.put("amount", order.getTotalAmount());
+            mqMessageSender.send(MqTopic.SECKILL_PLACE, "seckill", order.getOrderNo(), mqBody);
+
+            if (product.getAvailableStock() <= 0) {
+                mqMessageSender.send(MqTopic.SECKILL_END, mqBody);
+            }
+
+            result.put("success", true);
+            result.put("order", order);
             return result;
+            
+        } catch (Exception e) {
+            // 业务异常，回滚库存
+            redisUtil.atomicIncrement(stockKey, quantity);
+            throw e;
         }
-        
-        Long newStock = redisUtil.decrement(stockKey, quantity);
-        if (newStock < 0) {
-            redisUtil.increment(stockKey, quantity);
-            result.put("success", false);
-            result.put("message", "Insufficient stock");
-            return result;
-        }
-        
-        redisUtil.increment(userLimitKey, quantity);
-        
-        SeckillOrder order = new SeckillOrder();
-        order.setOrderNo("SK" + System.currentTimeMillis() + new Random().nextInt(1000));
-        order.setUserId(userId);
-        order.setActivityId(activityId);
-        order.setProductId(productId);
-        order.setSkuId(skuId);
-        order.setQuantity(quantity);
-        order.setSeckillPrice(product.getSeckillPrice());
-        order.setTotalAmount(product.getSeckillPrice().multiply(new java.math.BigDecimal(quantity)));
-        order.setStatus(0);
-        order.setCreatedAt(LocalDateTime.now());
-        seckillOrderMapper.insert(order);
-        
-        product.setAvailableStock(newStock.intValue());
-        product.setSalesCount(product.getSalesCount() + quantity);
-        seckillProductMapper.updateById(product);
-
-        Map<String, Object> mqBody = new HashMap<>();
-        mqBody.put("orderNo", order.getOrderNo());
-        mqBody.put("userId", userId);
-        mqBody.put("productId", productId);
-        mqBody.put("skuId", skuId);
-        mqBody.put("quantity", quantity);
-        mqBody.put("activityId", activityId);
-        mqBody.put("amount", order.getTotalAmount());
-        mqMessageSender.send(MqTopic.SECKILL_PLACE, "seckill", order.getOrderNo(), mqBody);
-
-        if (product.getAvailableStock() <= 0) {
-            mqMessageSender.send(MqTopic.SECKILL_END, mqBody);
-        }
-
-        result.put("success", true);
-        result.put("order", order);
-        return result;
     }
 
     @Override

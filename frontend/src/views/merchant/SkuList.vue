@@ -53,7 +53,7 @@
     <el-dialog v-model="showAddDialog" title="添加SKU" width="500px">
       <el-form :model="addForm" label-width="80px">
         <el-form-item label="选择商品">
-          <el-select v-model="addForm.productId" placeholder="请选择商品" style="width: 100%;">
+          <el-select v-model="addForm.productId" placeholder="请选择商品" style="width: 100%;" @change="handleProductChange">
             <el-option
               v-for="p in productList"
               :key="p.id"
@@ -186,6 +186,14 @@ async function loadSkus() {
 function handlePageChange(val: number) {
   page.value = val
   loadSkus()
+}
+
+function handleProductChange(productId: number) {
+  const product = productList.value.find(p => p.id === productId)
+  if (product) {
+    addForm.originalPrice = product.originalPrice || product.price || 0
+    addForm.price = product.price || 0
+  }
 }
 
 async function addSku() {

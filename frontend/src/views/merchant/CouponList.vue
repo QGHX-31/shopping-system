@@ -239,15 +239,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useMerchantStore } from '@/stores/merchant'
 import request from '@/utils/request'
 
 const merchantStore = useMerchantStore()
 const merchantId = computed(() => merchantStore.merchantInfo?.id || 0)
-
-import { computed } from 'vue'
 
 const activeTab = ref('platform')
 const searchKeyword = ref('')

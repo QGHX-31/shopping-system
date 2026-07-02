@@ -2,10 +2,12 @@ package com.shopping.common.utils;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.TypeReference;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -79,6 +81,108 @@ public class RedisUtil {
 
     public Long decrement(String key, long delta) {
         return redisTemplate.opsForValue().decrement(key, delta);
+    }
+
+    /**
+     * 原子扣减库存（使用Redis底层连接执行Lua脚本，保证原子性，防止超卖）
+     * 
+     * Lua脚本逻辑：
+     * 1. 获取当前库存（直接操作Redis原始字节，绕过JSON序列化）
+     * 2. 如果库存不存在，返回 -2
+     * 3. 如果库存 < 扣减数量，返回 -1
+     * 4. 否则扣减库存，返回扣减后的值
+     * 
+     * @param key 库存key
+     * @param delta 扣减数量
+     * @return 扣减后的库存（>=0），库存不足返回 -1，key不存在返回 -2
+     */
+    public Long atomicDecrement(String key, long delta) {
+        String luaScript = 
+            "local current = redis.call('GET', KEYS[1]) " +
+            "if current == false or current == nil then " +
+            "  return -2 " +
+            "end " +
+            "current = tonumber(current) " +
+            "if current == nil then " +
+            "  return -2 " +
+            "end " +
+            "if current < tonumber(ARGV[1]) then " +
+            "  return -1 " +
+            "end " +
+            "return redis.call('DECRBY', KEYS[1], ARGV[1])";
+        
+        try {
+            byte[] result = redisTemplate.execute((RedisCallback<byte[]>) connection -> 
+                connection.scriptingCommands().eval(
+                    luaScript.getBytes(StandardCharsets.UTF_8),
+                    org.springframework.data.redis.connection.ReturnType.INTEGER,
+                    1,
+                    key.getBytes(StandardCharsets.UTF_8),
+                    String.valueOf(delta).getBytes(StandardCharsets.UTF_8)
+                )
+            );
+            if (result == null) {
+                return -2L;
+            }
+            return Long.parseLong(new String(result, StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            return -2L;
+        }
+    }
+
+    /**
+     * 原子扣减库存（严格模式，秒杀场景使用）
+     * 与 atomicDecrement 行为一致，单独提供是为了语义清晰
+     * 
+     * @param key 库存key
+     * @param delta 扣减数量
+     * @return 扣减后的库存（>=0），库存不足返回 -1，key不存在返回 -2
+     */
+    public Long atomicDecrementStrict(String key, long delta) {
+        return atomicDecrement(key, delta);
+    }
+
+    /**
+     * 原子自增（用于补偿回滚）
+     * 
+     * @param key 库存key
+     * @param delta 增加数量
+     * @return 增加后的值
+     */
+    public Long atomicIncrement(String key, long delta) {
+        return redisTemplate.opsForValue().increment(key, delta);
+    }
+
+    /**
+     * 直接设置字符串值到Redis（绕过JSON序列化，用于Lua脚本操作）
+     * 
+     * @param key 键
+     * @param value 字符串值
+     */
+    public void setRawString(String key, String value) {
+        redisTemplate.execute((RedisCallback<Void>) connection -> {
+            connection.stringCommands().set(
+                key.getBytes(StandardCharsets.UTF_8),
+                value.getBytes(StandardCharsets.UTF_8)
+            );
+            return null;
+        });
+    }
+
+    /**
+     * 直接获取字符串值（绕过JSON反序列化）
+     * 
+     * @param key 键
+     * @return 字符串值，不存在返回 null
+     */
+    public String getRawString(String key) {
+        byte[] result = redisTemplate.execute((RedisCallback<byte[]>) connection -> 
+            connection.stringCommands().get(key.getBytes(StandardCharsets.UTF_8))
+        );
+        if (result == null) {
+            return null;
+        }
+        return new String(result, StandardCharsets.UTF_8);
     }
 
     public void hashSet(String key, String hashKey, Object value) {

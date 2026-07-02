@@ -233,8 +233,7 @@ async function toggleStatus(row: any) {
 }
 
 function editProduct(row: any) {
-  editingProduct.value = { ...row }
-  showEditDialog.value = true
+  router.push(`/merchant/product/edit/${row.id}`)
 }
 
 async function updateProduct() {
