@@ -212,6 +212,7 @@
               <div class="g-image">
                 <img :src="g.imageUrl || defaultImg" :alt="g.productName" />
                 <span class="g-tag">{{ g.requiredNum }}人成团</span>
+                <span v-if="g.activeTeamCount > 0" class="g-tag active-tag">拼团中 {{ g.activeTeamCount }}个团</span>
               </div>
               <div class="g-info">
                 <h4 class="g-name">{{ g.productName }}</h4>
@@ -1030,6 +1031,15 @@ onUnmounted(() => { if (cdTimer) clearInterval(cdTimer) })
       text-align: center;
       font-size: 11px;
       padding: 2px 0;
+    }
+    .active-tag {
+      top: 0;
+      bottom: auto;
+      left: auto;
+      right: 0;
+      background: rgba(245, 108, 108, 0.9);
+      padding: 2px 4px;
+      border-radius: 0 0 0 4px;
     }
   }
   .g-info {

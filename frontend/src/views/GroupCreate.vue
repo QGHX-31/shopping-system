@@ -424,10 +424,12 @@ async function handleSubmit() {
     const participationId = activity.value.id
 
     // 1. 创建拼团团队
-    const formData = new FormData()
-    formData.append('participationId', participationId.toString())
-    formData.append('userId', userId.toString())
-    const teamRes = await request.post('/group/team/open', formData)
+    const teamRes = await request.post('/group/team', null, {
+      params: {
+        activityId: participationId,
+        userId: userId
+      }
+    })
     const team = teamRes.data?.team
     if (!team || !team.teamNo) {
       throw new Error(teamRes.data?.message || '创建拼团团队失败')

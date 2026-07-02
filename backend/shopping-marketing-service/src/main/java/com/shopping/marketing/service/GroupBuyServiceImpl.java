@@ -6,6 +6,7 @@ import com.shopping.common.entity.GroupBuyActivity;
 import com.shopping.common.entity.GroupBuyMember;
 import com.shopping.common.entity.GroupBuyTeam;
 import com.shopping.common.entity.Product;
+import com.shopping.common.entity.User;
 import com.shopping.common.mq.MqMessageSender;
 import com.shopping.common.mq.MqTopic;
 import com.shopping.common.utils.RedisUtil;
@@ -49,6 +50,9 @@ public class GroupBuyServiceImpl implements GroupBuyService {
     @Resource
     private ProductMapper productMapper;
 
+    @Resource
+    private UserMapper userMapper;
+
     private static final String GROUP_STOCK_KEY = "group:stock:";
 
     @Override
@@ -89,6 +93,12 @@ public class GroupBuyServiceImpl implements GroupBuyService {
                 map.put("productName", "未知商品");
                 map.put("imageUrl", "");
             }
+            
+            LambdaQueryWrapper<GroupBuyTeam> teamWrapper = new LambdaQueryWrapper<>();
+            teamWrapper.eq(GroupBuyTeam::getActivityId, activity.getId())
+                       .eq(GroupBuyTeam::getStatus, 0);
+            long activeTeamCount = groupBuyTeamMapper.selectCount(teamWrapper);
+            map.put("activeTeamCount", activeTeamCount);
             
             resultList.add(map);
         }
@@ -469,9 +479,29 @@ public class GroupBuyServiceImpl implements GroupBuyService {
             memberWrapper.eq(GroupBuyMember::getTeamId, team.getId());
             List<GroupBuyMember> members = groupBuyMemberMapper.selectList(memberWrapper);
             
+            List<Map<String, Object>> memberList = new ArrayList<>();
+            for (GroupBuyMember member : members) {
+                Map<String, Object> memberMap = new HashMap<>();
+                memberMap.put("id", member.getId());
+                memberMap.put("teamId", member.getTeamId());
+                memberMap.put("userId", member.getUserId());
+                memberMap.put("orderNo", member.getOrderNo());
+                memberMap.put("isLeader", member.getIsLeader());
+                memberMap.put("joinTime", member.getJoinTime());
+                
+                User user = userMapper.selectById(member.getUserId());
+                if (user != null) {
+                    memberMap.put("nickname", user.getNickname());
+                    memberMap.put("userName", user.getUsername());
+                    memberMap.put("avatar", user.getAvatar());
+                }
+                
+                memberList.add(memberMap);
+            }
+            
             Map<String, Object> teamMap = new HashMap<>();
             teamMap.put("team", team);
-            teamMap.put("members", members);
+            teamMap.put("members", memberList);
             teamMap.put("activity", activity);
             teamList.add(teamMap);
         }
