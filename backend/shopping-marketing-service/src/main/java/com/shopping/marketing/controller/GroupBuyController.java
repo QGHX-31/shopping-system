@@ -31,8 +31,12 @@ public class GroupBuyController {
     private GroupBuyMemberMapper groupBuyMemberMapper;
 
     @GetMapping("/activity/list")
-    public Result<Map<String, Object>> getActiveActivities() {
-        Map<String, Object> data = groupBuyService.getActiveActivities();
+    public Result<Map<String, Object>> getActiveActivities(
+            @RequestParam(required = false) Long merchantId,
+            @RequestParam(required = false) Integer status,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size) {
+        Map<String, Object> data = groupBuyService.getActivityList(merchantId, status, page, size);
         return Result.success(data);
     }
 
@@ -49,6 +53,33 @@ public class GroupBuyController {
     public Result<GroupBuyActivity> createActivity(@RequestBody GroupBuyActivity activity) {
         GroupBuyActivity result = groupBuyService.createActivity(activity);
         return Result.success(result);
+    }
+
+    @PutMapping("/activity/update/{id}")
+    public Result<GroupBuyActivity> updateActivity(@PathVariable Long id, @RequestBody GroupBuyActivity activity) {
+        GroupBuyActivity result = groupBuyService.updateActivity(id, activity);
+        if (result == null) {
+            return Result.error("活动不存在");
+        }
+        return Result.success(result);
+    }
+
+    @PutMapping("/activity/status/{id}")
+    public Result<Boolean> updateActivityStatus(@PathVariable Long id, @RequestParam Integer status) {
+        boolean success = groupBuyService.updateActivityStatus(id, status);
+        if (!success) {
+            return Result.error("活动不存在");
+        }
+        return Result.success(true);
+    }
+
+    @DeleteMapping("/activity/delete/{id}")
+    public Result<Boolean> deleteActivity(@PathVariable Long id) {
+        boolean success = groupBuyService.deleteActivity(id);
+        if (!success) {
+            return Result.error("活动不存在");
+        }
+        return Result.success(true);
     }
 
     @PostMapping("/team")

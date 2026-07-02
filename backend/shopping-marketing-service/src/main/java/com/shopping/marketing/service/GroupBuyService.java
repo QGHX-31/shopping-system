@@ -10,9 +10,17 @@ public interface GroupBuyService {
     
     Map<String, Object> getActiveActivities();
     
+    Map<String, Object> getActivityList(Long merchantId, Integer status, Integer page, Integer size);
+    
     Map<String, Object> getActivityDetail(Long id);
     
     GroupBuyActivity createActivity(GroupBuyActivity activity);
+    
+    GroupBuyActivity updateActivity(Long id, GroupBuyActivity activity);
+    
+    boolean updateActivityStatus(Long id, Integer status);
+    
+    boolean deleteActivity(Long id);
     
     Map<String, Object> createTeam(Long activityId, Long userId);
 

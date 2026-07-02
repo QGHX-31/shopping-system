@@ -36,8 +36,10 @@
               @click="goProduct(product.id)"
             >
               <div class="product-image">
-                <img :src="product.imageUrl || 'https://via.placeholder.com/200'" alt="" />
-              </div>
+            <img :src="product.imageUrl || 'https://via.placeholder.com/200'" alt="" />
+            <span v-if="getProductActivity(product.id)?.type === 'seckill'" class="seckill-tag">秒杀</span>
+            <span v-if="getProductActivity(product.id)?.type === 'group'" class="group-tag">拼团</span>
+          </div>
               <h4 class="product-name">{{ product.name }}</h4>
               <p class="product-price">
                 <span class="current-price">¥{{ product.price.toFixed(2) }}</span>
@@ -67,6 +69,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useProductStore } from '@/stores/product'
 import Header from '@/components/Header.vue'
 import Footer from '@/components/Footer.vue'
+import request from '@/utils/request'
 
 const route = useRoute()
 const router = useRouter()
@@ -79,6 +82,29 @@ const currentPage = ref(1)
 const pageSize = ref(12)
 const total = ref(0)
 const products = ref<any[]>([])
+const activityMap = ref<Map<number, { type: string; price: number }>>(new Map())
+
+async function loadActivities() {
+  try {
+    const seckillRes = await request.get('/activity/seckill/active')
+    const seckillList = seckillRes.data || []
+    for (const item of seckillList) {
+      activityMap.value.set(item.productId, { type: 'seckill', price: item.seckillPrice })
+    }
+    
+    const groupRes = await request.get('/activity/group/active')
+    const groupList = groupRes.data || []
+    for (const item of groupList) {
+      activityMap.value.set(item.productId, { type: 'group', price: item.groupPrice })
+    }
+  } catch (error) {
+    console.error('加载活动信息失败', error)
+  }
+}
+
+function getProductActivity(productId: number) {
+  return activityMap.value.get(productId)
+}
 
 watch(() => sortBy.value, () => {
   currentPage.value = 1
@@ -151,6 +177,7 @@ onMounted(async () => {
   categoryId.value = id
   await loadCategories()
   await loadProducts()
+  loadActivities()
 })
 </script>
 
@@ -213,6 +240,7 @@ onMounted(async () => {
     }
 
     .product-image {
+      position: relative;
       height: 200px;
       overflow: hidden;
 
@@ -220,6 +248,28 @@ onMounted(async () => {
         width: 100%;
         height: 100%;
         object-fit: cover;
+      }
+
+      .seckill-tag {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        color: #fff;
+        background: #e6a23c;
+      }
+
+      .group-tag {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        color: #fff;
+        background: #409eff;
       }
     }
 

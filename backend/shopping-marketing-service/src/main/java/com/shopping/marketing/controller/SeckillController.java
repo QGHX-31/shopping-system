@@ -18,8 +18,12 @@ public class SeckillController {
     private SeckillService seckillService;
 
     @GetMapping("/activity/list")
-    public Result<Map<String, Object>> getActiveActivities() {
-        Map<String, Object> data = seckillService.getActiveActivities();
+    public Result<Map<String, Object>> getActiveActivities(
+            @RequestParam(required = false) Long merchantId,
+            @RequestParam(required = false) Integer status,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size) {
+        Map<String, Object> data = seckillService.getActivityList(merchantId, status, page, size);
         return Result.success(data);
     }
 
@@ -36,6 +40,33 @@ public class SeckillController {
     public Result<SeckillActivity> createActivity(@RequestBody SeckillActivity activity) {
         SeckillActivity result = seckillService.createActivity(activity);
         return Result.success(result);
+    }
+
+    @PutMapping("/activity/update/{id}")
+    public Result<SeckillActivity> updateActivity(@PathVariable Long id, @RequestBody SeckillActivity activity) {
+        SeckillActivity result = seckillService.updateActivity(id, activity);
+        if (result == null) {
+            return Result.error("活动不存在");
+        }
+        return Result.success(result);
+    }
+
+    @PutMapping("/activity/status/{id}")
+    public Result<Boolean> updateActivityStatus(@PathVariable Long id, @RequestParam Integer status) {
+        boolean success = seckillService.updateActivityStatus(id, status);
+        if (!success) {
+            return Result.error("活动不存在");
+        }
+        return Result.success(true);
+    }
+
+    @DeleteMapping("/activity/delete/{id}")
+    public Result<Boolean> deleteActivity(@PathVariable Long id) {
+        boolean success = seckillService.deleteActivity(id);
+        if (!success) {
+            return Result.error("活动不存在");
+        }
+        return Result.success(true);
     }
 
     @PostMapping("/activity/product/add")

@@ -3,12 +3,15 @@ package com.shopping.marketing.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.shopping.common.entity.Product;
 import com.shopping.common.entity.SeckillActivity;
 import com.shopping.common.entity.SeckillOrder;
 import com.shopping.common.entity.SeckillProduct;
 import com.shopping.common.mq.MqMessageSender;
 import com.shopping.common.mq.MqTopic;
 import com.shopping.common.utils.RedisUtil;
+import com.shopping.common.utils.Result;
+import com.shopping.marketing.mapper.ProductMapper;
 import com.shopping.marketing.mapper.SeckillActivityMapper;
 import com.shopping.marketing.mapper.SeckillOrderMapper;
 import com.shopping.marketing.mapper.SeckillProductMapper;
@@ -37,6 +40,9 @@ public class SeckillServiceImpl implements SeckillService {
     @Resource
     private MqMessageSender mqMessageSender;
 
+    @Resource
+    private ProductMapper productMapper;
+
     private static final String SECKILL_STOCK_KEY = "seckill:stock:";
     private static final String SECKILL_USER_LIMIT_KEY = "seckill:user:limit:";
 
@@ -44,14 +50,68 @@ public class SeckillServiceImpl implements SeckillService {
     public Map<String, Object> getActiveActivities() {
         LambdaQueryWrapper<SeckillActivity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SeckillActivity::getStatus, 1)
-               .le(SeckillActivity::getStartTime, LocalDateTime.now())
                .ge(SeckillActivity::getEndTime, LocalDateTime.now())
-               .orderByDesc(SeckillActivity::getCreatedAt);
+               .orderByAsc(SeckillActivity::getStartTime)
+               .last("LIMIT 20");
         List<SeckillActivity> activities = seckillActivityMapper.selectList(wrapper);
         
+        List<Map<String, Object>> resultList = new ArrayList<>();
+        for (SeckillActivity activity : activities) {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", activity.getId());
+            map.put("name", activity.getName());
+            map.put("productId", activity.getProductId());
+            map.put("seckillPrice", activity.getSeckillPrice());
+            map.put("originalPrice", activity.getOriginalPrice());
+            map.put("totalStock", activity.getTotalStock());
+            map.put("availableStock", activity.getAvailableStock());
+            map.put("startTime", activity.getStartTime());
+            map.put("endTime", activity.getEndTime());
+            map.put("status", activity.getStatus());
+            
+            if (activity.getProductId() != null) {
+                Product product = productMapper.selectById(activity.getProductId());
+                if (product != null) {
+                    map.put("productName", product.getName());
+                    map.put("imageUrl", product.getImageUrl());
+                    map.put("salesCount", product.getSalesCount());
+                } else {
+                    map.put("productName", "未知商品");
+                    map.put("imageUrl", "");
+                }
+            } else {
+                map.put("productName", "未知商品");
+                map.put("imageUrl", "");
+            }
+            
+            resultList.add(map);
+        }
+        
         Map<String, Object> result = new HashMap<>();
-        result.put("list", activities);
-        result.put("total", activities.size());
+        result.put("list", resultList);
+        result.put("total", resultList.size());
+        return result;
+    }
+
+    @Override
+    public Map<String, Object> getActivityList(Long merchantId, Integer status, Integer page, Integer size) {
+        Page<SeckillActivity> pageObj = new Page<>(page, size);
+        LambdaQueryWrapper<SeckillActivity> wrapper = new LambdaQueryWrapper<>();
+        if (merchantId != null) {
+            wrapper.eq(SeckillActivity::getMerchantId, merchantId);
+        }
+        if (status != null) {
+            wrapper.eq(SeckillActivity::getStatus, status);
+        }
+        wrapper.orderByDesc(SeckillActivity::getCreatedAt);
+        
+        Page<SeckillActivity> resultPage = seckillActivityMapper.selectPage(pageObj, wrapper);
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("list", resultPage.getRecords());
+        result.put("total", resultPage.getTotal());
+        result.put("page", page);
+        result.put("size", size);
         return result;
     }
 
@@ -75,10 +135,73 @@ public class SeckillServiceImpl implements SeckillService {
     @Override
     @Transactional
     public SeckillActivity createActivity(SeckillActivity activity) {
-        activity.setStatus(0);
+        activity.setStatus(1);
         activity.setCreatedAt(LocalDateTime.now());
+        activity.setUpdatedAt(LocalDateTime.now());
         seckillActivityMapper.insert(activity);
+        
+        if (activity.getAvailableStock() != null) {
+            String stockKey = SECKILL_STOCK_KEY + activity.getId();
+            redisUtil.set(stockKey, activity.getAvailableStock());
+        }
+        
         return activity;
+    }
+
+    @Override
+    @Transactional
+    public SeckillActivity updateActivity(Long id, SeckillActivity activity) {
+        SeckillActivity exist = seckillActivityMapper.selectById(id);
+        if (exist == null) {
+            return null;
+        }
+        if (activity.getName() != null) exist.setName(activity.getName());
+        if (activity.getMerchantId() != null) exist.setMerchantId(activity.getMerchantId());
+        if (activity.getProductId() != null) exist.setProductId(activity.getProductId());
+        if (activity.getSkuId() != null) exist.setSkuId(activity.getSkuId());
+        if (activity.getSeckillPrice() != null) exist.setSeckillPrice(activity.getSeckillPrice());
+        if (activity.getOriginalPrice() != null) exist.setOriginalPrice(activity.getOriginalPrice());
+        if (activity.getTotalStock() != null) exist.setTotalStock(activity.getTotalStock());
+        if (activity.getAvailableStock() != null) exist.setAvailableStock(activity.getAvailableStock());
+        if (activity.getStartTime() != null) exist.setStartTime(activity.getStartTime());
+        if (activity.getEndTime() != null) exist.setEndTime(activity.getEndTime());
+        if (activity.getDescription() != null) exist.setDescription(activity.getDescription());
+        if (activity.getBanner() != null) exist.setBanner(activity.getBanner());
+        exist.setUpdatedAt(LocalDateTime.now());
+        seckillActivityMapper.updateById(exist);
+        
+        String stockKey = SECKILL_STOCK_KEY + id;
+        redisUtil.set(stockKey, exist.getAvailableStock());
+        
+        return exist;
+    }
+
+    @Override
+    @Transactional
+    public boolean updateActivityStatus(Long id, Integer status) {
+        SeckillActivity activity = seckillActivityMapper.selectById(id);
+        if (activity == null) {
+            return false;
+        }
+        activity.setStatus(status);
+        activity.setUpdatedAt(LocalDateTime.now());
+        seckillActivityMapper.updateById(activity);
+        return true;
+    }
+
+    @Override
+    @Transactional
+    public boolean deleteActivity(Long id) {
+        SeckillActivity activity = seckillActivityMapper.selectById(id);
+        if (activity == null) {
+            return false;
+        }
+        seckillActivityMapper.deleteById(id);
+        
+        String stockKey = SECKILL_STOCK_KEY + id;
+        redisUtil.delete(stockKey);
+        
+        return true;
     }
 
     @Override

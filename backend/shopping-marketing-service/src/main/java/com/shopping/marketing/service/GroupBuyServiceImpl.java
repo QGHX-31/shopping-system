@@ -5,9 +5,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.shopping.common.entity.GroupBuyActivity;
 import com.shopping.common.entity.GroupBuyMember;
 import com.shopping.common.entity.GroupBuyTeam;
+import com.shopping.common.entity.Product;
 import com.shopping.common.mq.MqMessageSender;
 import com.shopping.common.mq.MqTopic;
 import com.shopping.common.utils.RedisUtil;
+import com.shopping.common.utils.Result;
 import com.shopping.common.entity.MerchantGroupParticipation;
 import com.shopping.common.entity.PlatformGroupTemplate;
 import com.shopping.marketing.mapper.*;
@@ -44,20 +46,78 @@ public class GroupBuyServiceImpl implements GroupBuyService {
     @Resource
     private MqMessageSender mqMessageSender;
 
+    @Resource
+    private ProductMapper productMapper;
+
     private static final String GROUP_STOCK_KEY = "group:stock:";
 
     @Override
     public Map<String, Object> getActiveActivities() {
         LambdaQueryWrapper<GroupBuyActivity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(GroupBuyActivity::getStatus, 1)
-               .le(GroupBuyActivity::getStartTime, LocalDateTime.now())
                .ge(GroupBuyActivity::getEndTime, LocalDateTime.now())
-               .orderByDesc(GroupBuyActivity::getCreatedAt);
+               .orderByAsc(GroupBuyActivity::getStartTime)
+               .last("LIMIT 20");
         List<GroupBuyActivity> activities = groupBuyActivityMapper.selectList(wrapper);
         
+        List<Map<String, Object>> resultList = new ArrayList<>();
+        for (GroupBuyActivity activity : activities) {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", activity.getId());
+            map.put("name", activity.getName());
+            map.put("productId", activity.getProductId());
+            map.put("groupPrice", activity.getGroupPrice());
+            map.put("originalPrice", activity.getOriginalPrice());
+            map.put("requiredNum", activity.getRequiredNum());
+            map.put("totalStock", activity.getTotalStock());
+            map.put("availableStock", activity.getAvailableStock());
+            map.put("startTime", activity.getStartTime());
+            map.put("endTime", activity.getEndTime());
+            map.put("status", activity.getStatus());
+            
+            if (activity.getProductId() != null) {
+                Product product = productMapper.selectById(activity.getProductId());
+                if (product != null) {
+                    map.put("productName", product.getName());
+                    map.put("imageUrl", product.getImageUrl());
+                    map.put("salesCount", product.getSalesCount());
+                } else {
+                    map.put("productName", "未知商品");
+                    map.put("imageUrl", "");
+                }
+            } else {
+                map.put("productName", "未知商品");
+                map.put("imageUrl", "");
+            }
+            
+            resultList.add(map);
+        }
+        
         Map<String, Object> result = new HashMap<>();
-        result.put("list", activities);
-        result.put("total", activities.size());
+        result.put("list", resultList);
+        result.put("total", resultList.size());
+        return result;
+    }
+
+    @Override
+    public Map<String, Object> getActivityList(Long merchantId, Integer status, Integer page, Integer size) {
+        Page<GroupBuyActivity> pageObj = new Page<>(page, size);
+        LambdaQueryWrapper<GroupBuyActivity> wrapper = new LambdaQueryWrapper<>();
+        if (merchantId != null) {
+            wrapper.eq(GroupBuyActivity::getMerchantId, merchantId);
+        }
+        if (status != null) {
+            wrapper.eq(GroupBuyActivity::getStatus, status);
+        }
+        wrapper.orderByDesc(GroupBuyActivity::getCreatedAt);
+        
+        Page<GroupBuyActivity> resultPage = groupBuyActivityMapper.selectPage(pageObj, wrapper);
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("list", resultPage.getRecords());
+        result.put("total", resultPage.getTotal());
+        result.put("page", page);
+        result.put("size", size);
         return result;
     }
 
@@ -76,14 +136,72 @@ public class GroupBuyServiceImpl implements GroupBuyService {
     @Override
     @Transactional
     public GroupBuyActivity createActivity(GroupBuyActivity activity) {
-        activity.setStatus(0);
+        activity.setStatus(1);
         activity.setCreatedAt(LocalDateTime.now());
+        activity.setUpdatedAt(LocalDateTime.now());
         groupBuyActivityMapper.insert(activity);
         
         String stockKey = GROUP_STOCK_KEY + activity.getId();
         redisUtil.set(stockKey, activity.getAvailableStock());
         
         return activity;
+    }
+
+    @Override
+    @Transactional
+    public GroupBuyActivity updateActivity(Long id, GroupBuyActivity activity) {
+        GroupBuyActivity exist = groupBuyActivityMapper.selectById(id);
+        if (exist == null) {
+            return null;
+        }
+        if (activity.getName() != null) exist.setName(activity.getName());
+        if (activity.getMerchantId() != null) exist.setMerchantId(activity.getMerchantId());
+        if (activity.getProductId() != null) exist.setProductId(activity.getProductId());
+        if (activity.getSkuId() != null) exist.setSkuId(activity.getSkuId());
+        if (activity.getGroupPrice() != null) exist.setGroupPrice(activity.getGroupPrice());
+        if (activity.getOriginalPrice() != null) exist.setOriginalPrice(activity.getOriginalPrice());
+        if (activity.getRequiredNum() != null) exist.setRequiredNum(activity.getRequiredNum());
+        if (activity.getTotalStock() != null) exist.setTotalStock(activity.getTotalStock());
+        if (activity.getAvailableStock() != null) exist.setAvailableStock(activity.getAvailableStock());
+        if (activity.getStartTime() != null) exist.setStartTime(activity.getStartTime());
+        if (activity.getEndTime() != null) exist.setEndTime(activity.getEndTime());
+        if (activity.getGroupDuration() != null) exist.setGroupDuration(activity.getGroupDuration());
+        if (activity.getDescription() != null) exist.setDescription(activity.getDescription());
+        exist.setUpdatedAt(LocalDateTime.now());
+        groupBuyActivityMapper.updateById(exist);
+        
+        String stockKey = GROUP_STOCK_KEY + id;
+        redisUtil.set(stockKey, exist.getAvailableStock());
+        
+        return exist;
+    }
+
+    @Override
+    @Transactional
+    public boolean updateActivityStatus(Long id, Integer status) {
+        GroupBuyActivity activity = groupBuyActivityMapper.selectById(id);
+        if (activity == null) {
+            return false;
+        }
+        activity.setStatus(status);
+        activity.setUpdatedAt(LocalDateTime.now());
+        groupBuyActivityMapper.updateById(activity);
+        return true;
+    }
+
+    @Override
+    @Transactional
+    public boolean deleteActivity(Long id) {
+        GroupBuyActivity activity = groupBuyActivityMapper.selectById(id);
+        if (activity == null) {
+            return false;
+        }
+        groupBuyActivityMapper.deleteById(id);
+        
+        String stockKey = GROUP_STOCK_KEY + id;
+        redisUtil.delete(stockKey);
+        
+        return true;
     }
 
     @Override

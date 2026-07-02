@@ -1,83 +1,80 @@
 <template>
-  <div class="seckill-list">
-    <el-tabs v-model="activeTab" @tab-change="handleTabChange">
-      <el-tab-pane label="平台活动" name="templates">
-        <div class="toolbar">
-          <el-input v-model="searchKeyword" placeholder="搜索活动名称" style="width: 240px;" clearable />
-          <el-button type="primary" @click="loadTemplates">查询</el-button>
-        </div>
-        <el-table :data="templateList" border>
-          <el-table-column prop="id" label="ID" width="80" />
-          <el-table-column prop="name" label="活动名称" min-width="180" />
-          <el-table-column prop="startTime" label="开始时间" width="180" />
-          <el-table-column prop="endTime" label="结束时间" width="180" />
-          <el-table-column prop="limitPerUser" label="每人限购" width="100" />
-          <el-table-column label="操作" width="120">
-            <template #default="scope">
-              <el-button size="small" type="primary" @click="openJoinDialog(scope.row)">报名参加</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-tab-pane>
-      <el-tab-pane label="我的报名" name="mine">
-        <div class="toolbar">
-          <el-select v-model="statusFilter" placeholder="报名状态" style="width: 160px;" clearable>
-            <el-option label="待审核" :value="1" />
-            <el-option label="已通过" :value="2" />
-            <el-option label="已拒绝" :value="0" />
-          </el-select>
-          <el-button type="primary" @click="loadMine">查询</el-button>
-        </div>
-        <el-table :data="mineList" border>
-          <el-table-column prop="id" label="ID" width="80" />
-          <el-table-column prop="templateId" label="活动ID" width="100" />
-          <el-table-column prop="productId" label="商品ID" width="100" />
-          <el-table-column prop="seckillPrice" label="秒杀价" width="120" />
-          <el-table-column prop="originalPrice" label="原价" width="120" />
-          <el-table-column prop="availableStock" label="可用库存" width="100" />
-          <el-table-column prop="status" label="状态" width="100">
-            <template #default="scope">
-              <el-tag :type="getStatusType(scope.row.status)">
-                {{ getStatusText(scope.row.status) }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="createdAt" label="报名时间" width="180" />
-        </el-table>
-      </el-tab-pane>
-    </el-tabs>
+  <div class="seckill-page">
+    <div class="page-header">
+      <h2>秒杀活动管理</h2>
+      <el-button type="success" @click="openCreateDialog">创建秒杀活动</el-button>
+    </div>
 
-    <el-dialog v-model="showJoinDialog" title="报名秒杀活动" width="600px">
-      <el-form :model="joinForm" label-width="100px">
-        <el-form-item label="活动名称">
-          <span>{{ currentTemplate?.name }}</span>
-        </el-form-item>
+    <el-table :data="tableData" border style="width: 100%;">
+      <el-table-column prop="id" label="ID" width="80" />
+      <el-table-column prop="name" label="活动名称" />
+      <el-table-column prop="productName" label="商品" />
+      <el-table-column prop="seckillPrice" label="秒杀价" width="100" />
+      <el-table-column prop="originalPrice" label="原价" width="100" />
+      <el-table-column prop="totalStock" label="总库存" width="100" />
+      <el-table-column prop="availableStock" label="剩余库存" width="100" />
+      <el-table-column prop="startTime" label="开始时间" width="180" />
+      <el-table-column prop="endTime" label="结束时间" width="180" />
+      <el-table-column label="状态" width="100">
+        <template #default="scope">
+          <el-tag :type="getStatusType(scope.row.status)">
+            {{ getStatusText(scope.row.status) }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="200">
+        <template #default="scope">
+          <el-button size="small" @click="editActivity(scope.row)">编辑</el-button>
+          <el-button size="small" :type="scope.row.status === 1 ? 'warning' : 'primary'" @click="toggleStatus(scope.row)">
+            {{ scope.row.status === 1 ? '暂停' : '开启' }}
+          </el-button>
+          <el-button size="small" type="danger" @click="deleteActivity(scope.row)">删除</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <el-pagination
+      v-model:current-page="pagination.page"
+      v-model:page-size="pagination.size"
+      :total="pagination.total"
+      style="margin-top: 20px; text-align: right;"
+      @current-change="loadList"
+      @size-change="loadList"
+    />
+
+    <el-dialog :title="editForm.id ? '编辑秒杀活动' : '创建秒杀活动'" v-model="dialogVisible" width="600px">
+      <el-form :model="editForm" label-width="100px">
         <el-form-item label="选择商品">
-          <el-select v-model="joinForm.productId" filterable placeholder="请选择商品" style="width: 100%;">
-            <el-option
-              v-for="p in productList"
-              :key="p.id"
-              :label="p.name"
-              :value="p.id"
-            />
+          <el-select v-model="editForm.productId" filterable placeholder="请选择商品" style="width: 100%;" @change="handleProductChange">
+            <el-option v-for="p in productList" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="秒杀价">
-          <el-input v-model="joinForm.seckillPrice" type="number" />
+          <el-input-number v-model="editForm.seckillPrice" :min="0" :precision="2" style="width: 100%;" />
         </el-form-item>
         <el-form-item label="原价">
-          <el-input v-model="joinForm.originalPrice" type="number" />
+          <el-input-number v-model="editForm.originalPrice" :min="0" :precision="2" style="width: 100%;" />
         </el-form-item>
         <el-form-item label="总库存">
-          <el-input v-model="joinForm.totalStock" type="number" />
+          <el-input-number v-model="editForm.totalStock" :min="1" style="width: 100%;" />
         </el-form-item>
-        <el-form-item label="每人限购">
-          <el-input v-model="joinForm.limitPerUser" type="number" />
+        <el-form-item label="活动时间">
+          <el-date-picker
+            v-model="editForm.dateRange"
+            type="datetimerange"
+            range-separator="至"
+            start-placeholder="开始时间"
+            end-placeholder="结束时间"
+            style="width: 100%;"
+          />
+        </el-form-item>
+        <el-form-item label="活动描述">
+          <el-input type="textarea" v-model="editForm.description" placeholder="请输入活动描述" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showJoinDialog = false">取消</el-button>
-        <el-button type="primary" @click="submitJoin">提交报名</el-button>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveActivity">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -85,132 +82,207 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
-import { useMerchantStore } from '@/stores/merchant'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { merchantRequest, getMerchantId } from '@/utils/merchantRequest'
 
-const merchantStore = useMerchantStore()
-const merchantId = ref(Number(localStorage.getItem('merchant_id') || 0))
+const merchantId = getMerchantId()
 
-const activeTab = ref('templates')
-const searchKeyword = ref('')
-const statusFilter = ref<number | ''>('')
-const templateList = ref<any[]>([])
-const mineList = ref<any[]>([])
+const tableData = ref<any[]>([])
 const productList = ref<any[]>([])
-const showJoinDialog = ref(false)
-const currentTemplate = ref<any>(null)
+const dialogVisible = ref(false)
+const pagination = reactive({
+  page: 1,
+  size: 10,
+  total: 0
+})
 
-const joinForm = reactive({
-  templateId: 0,
-  merchantId: 0,
-  productId: 0,
+const editForm = reactive({
+  id: null as number | null,
+  productId: null as number | null,
   skuId: null as number | null,
   seckillPrice: 0,
   originalPrice: 0,
   totalStock: 0,
   availableStock: 0,
-  limitPerUser: 1
+  dateRange: [] as Date[],
+  description: ''
 })
 
-function getStatusType(status: number) {
-  const types: Record<number, string> = { 0: 'danger', 1: 'warning', 2: 'success' }
-  return types[status] || 'info'
-}
-
-function getStatusText(status: number) {
-  const texts: Record<number, string> = { 0: '已拒绝', 1: '待审核', 2: '已通过' }
-  return texts[status] || '未知'
-}
-
-async function loadTemplates() {
-  try {
-    const res = await request.get('/activity/merchant/seckill/templates')
-    let list = res.data || []
-    if (searchKeyword.value) {
-      list = list.filter((t: any) => t.name.includes(searchKeyword.value))
-    }
-    templateList.value = list
-  } catch (e) {
-    console.error('加载平台活动失败', e)
+const getStatusText = (status: number) => {
+  const map: Record<number, string> = {
+    0: '未开始',
+    1: '进行中',
+    2: '已结束'
   }
+  return map[status] || '未知'
 }
 
-async function loadMine() {
-  try {
-    const res = await request.get(`/activity/merchant/seckill/list/${merchantId.value}`)
-    let list = res.data || []
-    if (statusFilter.value !== '') {
-      list = list.filter((t: any) => t.status === statusFilter.value)
-    }
-    mineList.value = list
-  } catch (e) {
-    console.error('加载我的报名失败', e)
+const getStatusType = (status: number) => {
+  const map: Record<number, string> = {
+    0: 'info',
+    1: 'success',
+    2: 'danger'
   }
+  return map[status] || 'info'
 }
 
-async function loadProducts() {
+const loadList = async () => {
   try {
-    const res = await request.get('/merchant/product/list', {
-      params: { merchantId: merchantId.value, page: 1, size: 100 }
+    const res = await merchantRequest.get('/seckill/activity/list', {
+      params: {
+        merchantId,
+        page: pagination.page,
+        size: pagination.size
+      }
     })
-    productList.value = res.data.list || res.data || []
-  } catch (e) {
-    console.error('加载商品列表失败', e)
+    tableData.value = res.data.list || []
+    pagination.total = res.data.total || 0
+  } catch (error) {
+    console.error('加载秒杀活动列表失败', error)
   }
 }
 
-function handleTabChange() {
-  if (activeTab.value === 'templates') {
-    loadTemplates()
-  } else {
-    loadMine()
+const loadProducts = async () => {
+  try {
+    const res = await merchantRequest.get('/merchant/product/list', {
+      params: {
+        merchantId,
+        page: 1,
+        size: 100
+      }
+    })
+    productList.value = res.data.list || []
+  } catch (error) {
+    console.error('加载商品列表失败', error)
   }
 }
 
-function openJoinDialog(template: any) {
-  currentTemplate.value = template
-  joinForm.templateId = template.id
-  joinForm.merchantId = merchantId.value
-  joinForm.productId = 0
-  joinForm.seckillPrice = 0
-  joinForm.originalPrice = 0
-  joinForm.totalStock = 0
-  joinForm.availableStock = 0
-  joinForm.limitPerUser = template.limitPerUser || 1
-  loadProducts()
-  showJoinDialog.value = true
+const handleProductChange = async (productId: number) => {
+  if (!productId) return
+  try {
+    const res = await merchantRequest.get(`/product/${productId}`)
+    const product = res.data
+    if (product) {
+      editForm.originalPrice = product.price || 0
+    }
+  } catch (error) {
+    console.error('获取商品信息失败', error)
+  }
 }
 
-async function submitJoin() {
-  if (!joinForm.productId) {
+const openCreateDialog = () => {
+  editForm.id = null
+  editForm.productId = null
+  editForm.skuId = null
+  editForm.seckillPrice = 0
+  editForm.originalPrice = 0
+  editForm.totalStock = 0
+  editForm.availableStock = 0
+  editForm.dateRange = []
+  editForm.description = ''
+  dialogVisible.value = true
+}
+
+const editActivity = async (row: any) => {
+  editForm.id = row.id
+  editForm.productId = row.productId
+  editForm.skuId = row.skuId
+  editForm.seckillPrice = row.seckillPrice || row.price
+  editForm.originalPrice = row.originalPrice
+  editForm.totalStock = row.totalStock
+  editForm.availableStock = row.availableStock
+  editForm.dateRange = row.startTime && row.endTime ? [new Date(row.startTime), new Date(row.endTime)] : []
+  editForm.description = row.description || ''
+  dialogVisible.value = true
+}
+
+const saveActivity = async () => {
+  if (!editForm.productId) {
     ElMessage.warning('请选择商品')
     return
   }
-  joinForm.availableStock = joinForm.totalStock
+  if (editForm.seckillPrice >= editForm.originalPrice) {
+    ElMessage.warning('秒杀价必须低于原价')
+    return
+  }
+  if (!editForm.dateRange || editForm.dateRange.length < 2) {
+    ElMessage.warning('请选择活动时间')
+    return
+  }
+
   try {
-    await request.post('/activity/merchant/seckill/join', joinForm)
-    ElMessage.success('报名成功，等待审核')
-    showJoinDialog.value = false
-    loadMine()
-  } catch (e) {
-    ElMessage.error('报名失败')
+    const productRes = await merchantRequest.get(`/product/${editForm.productId}`)
+    const productName = productRes.data?.name || editForm.productId
+
+    const data = {
+      name: `${productName} 秒杀活动`,
+      merchantId,
+      productId: editForm.productId,
+      skuId: editForm.skuId,
+      seckillPrice: editForm.seckillPrice,
+      originalPrice: editForm.originalPrice,
+      totalStock: editForm.totalStock,
+      availableStock: editForm.totalStock,
+      startTime: editForm.dateRange[0]?.toISOString(),
+      endTime: editForm.dateRange[1]?.toISOString(),
+      description: editForm.description
+    }
+
+    if (editForm.id) {
+      await merchantRequest.put(`/seckill/activity/update/${editForm.id}`, data)
+      ElMessage.success('更新成功')
+    } else {
+      await merchantRequest.post('/seckill/activity/create', data)
+      ElMessage.success('创建成功')
+    }
+    dialogVisible.value = false
+    loadList()
+  } catch (error: any) {
+    console.error('保存失败', error)
+    ElMessage.error('保存失败: ' + (error.response?.data?.message || error.message || '未知错误'))
+  }
+}
+
+const toggleStatus = async (row: any) => {
+  const newStatus = row.status === 1 ? 0 : 1
+  try {
+    await merchantRequest.put(`/seckill/activity/status/${row.id}`, {}, {
+      params: { status: newStatus }
+    })
+    ElMessage.success('状态更新成功')
+    loadList()
+  } catch (error) {
+    console.error('状态更新失败', error)
+    ElMessage.error('状态更新失败')
+  }
+}
+
+const deleteActivity = async (row: any) => {
+  try {
+    await ElMessageBox.confirm('确定要删除这个活动吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await merchantRequest.delete(`/seckill/activity/delete/${row.id}`)
+    ElMessage.success('删除成功')
+    loadList()
+  } catch (error) {
+    console.error('删除失败', error)
   }
 }
 
 onMounted(() => {
-  loadTemplates()
+  loadList()
+  loadProducts()
 })
 </script>
 
-<style lang="scss" scoped>
-.seckill-list {
-  padding: 20px;
-}
-
-.toolbar {
+<style scoped>
+.page-header {
   display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
 }
 </style>

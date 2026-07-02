@@ -11,9 +11,17 @@ public interface SeckillService {
     
     Map<String, Object> getActiveActivities();
     
+    Map<String, Object> getActivityList(Long merchantId, Integer status, Integer page, Integer size);
+    
     Map<String, Object> getActivityDetail(Long id);
     
     SeckillActivity createActivity(SeckillActivity activity);
+    
+    SeckillActivity updateActivity(Long id, SeckillActivity activity);
+    
+    boolean updateActivityStatus(Long id, Integer status);
+    
+    boolean deleteActivity(Long id);
     
     SeckillProduct addProductToActivity(SeckillProduct product);
     
