@@ -145,6 +145,13 @@ public class OrderServiceImpl implements OrderService {
                 for (OrderItemRequest item : merchantItems) {
                     Product product = productCache.get(item.getProductId());
                     BigDecimal price = product.getPrice();
+                    
+                    // 如果是拼团订单且有拼团价，使用拼团价
+                    if (request.getGroupTeamNo() != null && !request.getGroupTeamNo().isEmpty() 
+                            && request.getGroupPrice() != null && request.getGroupPrice().compareTo(BigDecimal.ZERO) > 0) {
+                        price = request.getGroupPrice();
+                    }
+                    
                     BigDecimal subtotal = price.multiply(BigDecimal.valueOf(item.getQuantity()));
                     merchantTotal = merchantTotal.add(subtotal);
 

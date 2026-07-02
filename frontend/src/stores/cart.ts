@@ -50,7 +50,7 @@ export const useCartStore = defineStore('cart', () => {
         productId: item.productId,
         productName: productInfo.name || `商品${item.productId}`,
         productImage: productInfo.imageUrl || '',
-        price: productInfo.price || 0,
+        price: productInfo.originalPrice != null ? productInfo.originalPrice : productInfo.price || 0,
         quantity: item.quantity,
         selected: item.selected === 1 || item.selected === true,
         categoryId: productInfo.categoryId || 0,

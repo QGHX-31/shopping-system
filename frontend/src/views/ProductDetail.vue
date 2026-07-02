@@ -64,11 +64,11 @@
                 <span class="activity-tip">限时特惠，每人限购{{ seckillActivity.limitPerUser }}件</span>
               </div>
             </div>
-            <div class="activity-item" v-if="groupActivity">
+            <div class="activity-item">
               <el-icon class="activity-icon group-icon"><UserFilled /></el-icon>
               <div class="activity-content">
-                <span class="activity-name">{{ groupActivity.requiredNum }}人拼团</span>
-                <span class="activity-price">拼团价 ¥{{ formatPrice(groupActivity.groupPrice) }}</span>
+                <span class="activity-name">2人拼团</span>
+                <span class="activity-price">拼团价 ¥{{ formatPrice(groupPrice) }}</span>
                 <span class="activity-tip">邀请好友一起拼，更划算</span>
               </div>
             </div>
@@ -128,14 +128,11 @@
           <div class="product-price-box">
             <div class="price-label">价格</div>
             <div class="price-content">
-              <span class="current-price">¥{{ formatPrice(showPrice) }}</span>
-              <span v-if="showOriginalPrice && showOriginalPrice > showPrice" class="original-price">
-                ¥{{ formatPrice(showOriginalPrice) }}
-              </span>
-              <span v-if="showOriginalPrice && showOriginalPrice > showPrice" class="discount-tag">
-                立省 ¥{{ formatPrice(Number(showOriginalPrice) - Number(showPrice)) }}
-              </span>
+              <span class="group-price">¥{{ formatPrice(groupPrice) }}</span>
+              <span class="group-tag">拼团价</span>
+              <span class="original-price">¥{{ formatPrice(showPrice) }}</span>
             </div>
+            <div class="price-tip">单独购买 ¥{{ formatPrice(showPrice) }}，拼团更优惠</div>
           </div>
 
           <div class="product-promotion">
@@ -211,11 +208,10 @@
 
           <div class="action-buttons">
             <el-button
-              v-if="groupActivity"
               type="success"
               size="large"
               class="group-btn"
-              :disabled="!currentStock || !groupActivity.availableStock || (skuList.length > 0 && !selectedSku)"
+              :disabled="!currentStock || (skuList.length > 0 && !selectedSku)"
               @click="handleStartGroup"
             >
               <el-icon><UserFilled /></el-icon>
@@ -444,8 +440,19 @@ const currentStock = computed(() => {
   return product.value?.stock || 0
 })
 
-// 显示价格
+// 显示价格（单独购买价=原价）
 const showPrice = computed(() => {
+  if (selectedSku.value?.originalPrice != null) {
+    return selectedSku.value.originalPrice
+  }
+  if (product.value?.originalPrice != null) {
+    return product.value.originalPrice
+  }
+  return product.value?.price || 0
+})
+
+// 拼团价（售价）
+const groupPrice = computed(() => {
   if (selectedSku.value?.price != null) {
     return selectedSku.value.price
   }
@@ -641,10 +648,13 @@ async function loadActivities(productId: number) {
     if (seckillRes.data && seckillRes.data.length > 0) {
       seckillActivity.value = seckillRes.data[0]
     }
-    // 加载拼团活动
-    const groupRes = await request.get(`/activity/group/product/${productId}`)
-    if (groupRes.data && groupRes.data.length > 0) {
-      groupActivity.value = groupRes.data[0]
+    // 加载拼团信息
+    const groupRes = await request.get(`/group/product/${productId}`)
+    if (groupRes.data && groupRes.data.hasGroupBuy) {
+      groupActivity.value = {
+        groupPrice: groupRes.data.groupPrice,
+        requiredNum: groupRes.data.groupNum
+      }
       // 加载正在进行的拼团
       loadActiveGroups(productId)
     }
@@ -849,13 +859,12 @@ async function handleStartGroup() {
     }
     return
   }
-  if (!product.value?.id || !groupActivity.value) return
+  if (!product.value?.id) return
   // 跳转到拼团页面
   router.push({
     path: '/group/create',
     query: {
-      productId: product.value.id,
-      activityId: groupActivity.value.id
+      productId: product.value.id
     }
   })
 }
@@ -920,7 +929,8 @@ async function handleJoinGroup(teamNo: string) {
         quantity: 1
       }],
       addressId: defaultAddr.id,
-      groupTeamNo: teamNo
+      groupTeamNo: teamNo,
+      groupPrice: groupPrice.value
     }
     const orderRes = await request.post('/order/create', orderData)
 
@@ -1290,15 +1300,27 @@ onMounted(() => {
       gap: 12px;
       flex-wrap: wrap;
     }
-    .current-price {
+    .group-price {
       font-size: 36px;
       color: #ff4400;
       font-weight: bold;
+    }
+    .group-tag {
+      background: #ff4400;
+      color: #fff;
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 12px;
     }
     .original-price {
       font-size: 16px;
       color: #999;
       text-decoration: line-through;
+    }
+    .price-tip {
+      font-size: 12px;
+      color: #ff6b35;
+      margin-top: 8px;
     }
     .discount-tag {
       background: #ff4400;

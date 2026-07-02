@@ -24,6 +24,8 @@ public interface GroupBuyService {
     
     Map<String, Object> createTeam(Long activityId, Long userId);
 
+    Map<String, Object> createTeamByProduct(Long productId, Long userId);
+
     Map<String, Object> createTeamByParticipation(Long participationId, Long userId);
 
     Map<String, Object> joinTeam(String teamNo, Long userId);

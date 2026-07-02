@@ -497,8 +497,10 @@ const loadingGroup = ref(false)
 async function loadGroups() {
   loadingGroup.value = true
   try {
-    const res = await request.get('/activity/group/active')
-    groupList.value = (res.data || []).slice(0, 3)
+    const res = await request.get('/group/product/list', {
+      params: { page: 1, size: 3 }
+    })
+    groupList.value = res.data?.list || []
   } catch {
     groupList.value = []
   } finally {
@@ -516,8 +518,7 @@ async function openGroup(g: any) {
     router.push({
       path: '/group/create',
       query: {
-        productId: g.productId,
-        activityId: g.id
+        productId: g.productId
       }
     })
   } catch (e: any) {

@@ -275,22 +275,32 @@ async function loadData() {
 
   loading.value = true
   try {
-    const activityId = route.query.activityId
     const productId = route.query.productId
-    if (!activityId || !productId) {
+    if (!productId) {
       ElMessage.warning('参数错误')
       router.back()
       return
     }
 
-    const res = await request.get('/activity/group/active')
-    const list = res.data || []
-    activity.value = list.find((a: any) => a.id === Number(activityId)) || list[0]
-
-    if (!activity.value) {
-      ElMessage.warning('拼团活动不存在')
+    const groupRes = await request.get(`/group/product/${productId}`)
+    const groupInfo = groupRes.data
+    if (!groupInfo || !groupInfo.hasGroupBuy) {
+      ElMessage.warning('该商品未开启拼团')
       router.back()
       return
+    }
+
+    const productRes = await request.get(`/product/${productId}`)
+    const product = productRes.data
+
+    activity.value = {
+      id: 0,
+      productId: productId,
+      productName: product?.name || '拼团商品',
+      imageUrl: product?.imageUrl || '',
+      groupPrice: groupInfo.groupPrice,
+      originalPrice: product?.originalPrice || product?.price || 0,
+      requiredNum: groupInfo.groupNum || 2
     }
 
     await loadAddresses()
@@ -421,12 +431,12 @@ async function handleSubmit() {
   submitting.value = true
   try {
     const userId = userStore.userInfo?.id
-    const participationId = activity.value.id
+    const productId = activity.value.productId
 
     // 1. 创建拼团团队
-    const teamRes = await request.post('/group/team', null, {
+    const teamRes = await request.post('/group/team/product', null, {
       params: {
-        activityId: participationId,
+        productId: productId,
         userId: userId
       }
     })
@@ -439,13 +449,13 @@ async function handleSubmit() {
     const orderData = {
       userId: userId,
       items: [{
-        productId: activity.value.productId,
+        productId: productId,
         quantity: 1
       }],
       addressId: selectedAddress.value.id,
       remark: remark.value,
       groupTeamNo: team.teamNo,
-      groupActivityId: participationId
+      groupPrice: activity.value.groupPrice
     }
 
     const orderRes = await request.post('/order/create', orderData)

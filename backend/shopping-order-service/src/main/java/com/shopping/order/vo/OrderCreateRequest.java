@@ -30,4 +30,6 @@ public class OrderCreateRequest {
     private String groupTeamNo;
 
     private Long groupActivityId;
+
+    private java.math.BigDecimal groupPrice;
 }

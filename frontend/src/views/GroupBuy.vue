@@ -22,12 +22,11 @@
               <span class="original-price">¥{{ Number(p.originalPrice).toFixed(2) }}</span>
             </div>
             <div class="stock-info">
-              <span>库存 {{ p.availableStock }} 件</span>
+              <span>销量 {{ p.salesCount || 0 }} 件</span>
             </div>
             <el-button
               type="success"
               style="width: 100%; margin-top: 10px"
-              :disabled="p.availableStock <= 0"
               @click.stop="openGroup(p)"
             >
               发起拼团
@@ -63,8 +62,10 @@ function goProduct(id: number) {
 async function loadList() {
   loading.value = true
   try {
-    const res = await request.get('/activity/group/active')
-    list.value = res.data || []
+    const res = await request.get('/group/product/list', {
+      params: { page: 1, size: 20 }
+    })
+    list.value = res.data?.list || []
   } finally { loading.value = false }
 }
 
@@ -74,14 +75,12 @@ async function openGroup(p: any) {
     router.push('/login')
     return
   }
-  if (p.availableStock <= 0) return ElMessage.warning('库存不足')
   try {
     await ElMessageBox.confirm(`确认发起【${p.productName}】的拼团？`, '发起拼团', { type: 'success' })
     router.push({
       path: '/group/create',
       query: {
-        productId: p.productId,
-        activityId: p.id
+        productId: p.productId
       }
     })
   } catch (e: any) {

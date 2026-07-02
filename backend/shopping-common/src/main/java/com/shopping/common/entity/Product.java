@@ -16,6 +16,9 @@ public class Product {
     private String brand;
     private BigDecimal price;
     private BigDecimal originalPrice;
+    private Integer hasGroupBuy;
+    private BigDecimal groupPrice;
+    private Integer groupNum;
     private Integer stock;
     private Integer salesCount;
     private String description;

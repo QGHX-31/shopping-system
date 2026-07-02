@@ -3,9 +3,11 @@ package com.shopping.marketing.controller;
 import com.shopping.common.entity.GroupBuyActivity;
 import com.shopping.common.entity.GroupBuyMember;
 import com.shopping.common.entity.GroupBuyTeam;
+import com.shopping.common.entity.Product;
 import com.shopping.common.utils.Result;
 import com.shopping.marketing.mapper.GroupBuyMemberMapper;
 import com.shopping.marketing.mapper.GroupBuyTeamMapper;
+import com.shopping.marketing.mapper.ProductMapper;
 import com.shopping.marketing.service.GroupBuyService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.web.bind.annotation.*;
@@ -29,6 +31,9 @@ public class GroupBuyController {
 
     @Resource
     private GroupBuyMemberMapper groupBuyMemberMapper;
+
+    @Resource
+    private ProductMapper productMapper;
 
     @GetMapping("/activity/list")
     public Result<Map<String, Object>> getActiveActivities(
@@ -183,5 +188,81 @@ public class GroupBuyController {
         groupBuyTeamMapper.updateById(team);
         
         return Result.success();
+    }
+
+    @GetMapping("/product/{productId}")
+    public Result<Map<String, Object>> getProductGroupInfo(@PathVariable Long productId) {
+        Product product = productMapper.selectById(productId);
+        if (product == null) {
+            return Result.error("商品不存在");
+        }
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("hasGroupBuy", true);
+        result.put("groupPrice", product.getPrice());
+        result.put("groupNum", 2);
+        result.put("productId", productId);
+        
+        LambdaQueryWrapper<GroupBuyTeam> teamWrapper = new LambdaQueryWrapper<>();
+        teamWrapper.eq(GroupBuyTeam::getProductId, productId)
+                   .eq(GroupBuyTeam::getStatus, 0)
+                   .orderByDesc(GroupBuyTeam::getCreatedAt);
+        List<GroupBuyTeam> teams = groupBuyTeamMapper.selectList(teamWrapper);
+        result.put("activeTeamCount", teams.size());
+        
+        return Result.success(result);
+    }
+
+    @GetMapping("/product/list")
+    public Result<Map<String, Object>> getGroupProductList(
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size) {
+        LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Product::getStatus, 1)
+               .orderByDesc(Product::getSalesCount);
+        
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<Product> pageObj = 
+            new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size);
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<Product> resultPage = 
+            productMapper.selectPage(pageObj, wrapper);
+        
+        List<Map<String, Object>> list = new java.util.ArrayList<>();
+        for (Product product : resultPage.getRecords()) {
+            Map<String, Object> item = new java.util.HashMap<>();
+            item.put("id", product.getId());
+            item.put("productId", product.getId());
+            item.put("productName", product.getName());
+            item.put("imageUrl", product.getImageUrl());
+            item.put("groupPrice", product.getPrice());
+            item.put("originalPrice", product.getOriginalPrice() != null ? product.getOriginalPrice() : product.getPrice());
+            item.put("requiredNum", 2);
+            item.put("salesCount", product.getSalesCount());
+            
+            LambdaQueryWrapper<GroupBuyTeam> teamWrapper = new LambdaQueryWrapper<>();
+            teamWrapper.eq(GroupBuyTeam::getProductId, product.getId())
+                       .eq(GroupBuyTeam::getStatus, 0);
+            Long activeTeamCount = groupBuyTeamMapper.selectCount(teamWrapper);
+            item.put("activeTeamCount", activeTeamCount);
+            
+            list.add(item);
+        }
+        
+        Map<String, Object> result = new java.util.HashMap<>();
+        result.put("list", list);
+        result.put("total", resultPage.getTotal());
+        result.put("page", page);
+        result.put("size", size);
+        return Result.success(result);
+    }
+
+    @PostMapping("/team/product")
+    public Result<Map<String, Object>> createTeamByProduct(@RequestParam Long productId,
+                                                             @RequestParam Long userId) {
+        Map<String, Object> result = groupBuyService.createTeamByProduct(productId, userId);
+        Boolean success = (Boolean) result.get("success");
+        if (success != null && !success) {
+            return Result.error((String) result.get("message"));
+        }
+        return Result.success(result);
     }
 }

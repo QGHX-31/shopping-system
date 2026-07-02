@@ -846,7 +846,7 @@ async function loadData() {
         productId: p.id,
         name: p.name,
         imageUrl: p.imageUrl,
-        price: p.price,
+        price: p.originalPrice != null ? p.originalPrice : p.price,
         merchantId: p.merchantId,
         categoryId: p.categoryId,
         quantity

@@ -7,6 +7,7 @@ import com.shopping.common.entity.Product;
 import com.shopping.common.entity.SeckillActivity;
 import com.shopping.common.entity.SeckillOrder;
 import com.shopping.common.entity.SeckillProduct;
+import com.shopping.common.exception.BusinessException;
 import com.shopping.common.mq.MqMessageSender;
 import com.shopping.common.mq.MqTopic;
 import com.shopping.common.utils.RedisUtil;
@@ -135,6 +136,14 @@ public class SeckillServiceImpl implements SeckillService {
     @Override
     @Transactional
     public SeckillActivity createActivity(SeckillActivity activity) {
+        if (activity.getProductId() != null && activity.getSeckillPrice() != null) {
+            Product product = productMapper.selectById(activity.getProductId());
+            if (product != null && product.getPrice() != null) {
+                if (activity.getSeckillPrice().compareTo(product.getPrice()) >= 0) {
+                    throw new BusinessException("秒杀价必须低于商品售价（拼团价）");
+                }
+            }
+        }
         activity.setStatus(1);
         activity.setCreatedAt(LocalDateTime.now());
         activity.setUpdatedAt(LocalDateTime.now());
@@ -154,6 +163,17 @@ public class SeckillServiceImpl implements SeckillService {
         SeckillActivity exist = seckillActivityMapper.selectById(id);
         if (exist == null) {
             return null;
+        }
+        if (activity.getSeckillPrice() != null) {
+            Long productId = activity.getProductId() != null ? activity.getProductId() : exist.getProductId();
+            if (productId != null) {
+                Product product = productMapper.selectById(productId);
+                if (product != null && product.getPrice() != null) {
+                    if (activity.getSeckillPrice().compareTo(product.getPrice()) >= 0) {
+                        throw new BusinessException("秒杀价必须低于商品售价（拼团价）");
+                    }
+                }
+            }
         }
         if (activity.getName() != null) exist.setName(activity.getName());
         if (activity.getMerchantId() != null) exist.setMerchantId(activity.getMerchantId());

@@ -11,6 +11,7 @@ public class GroupBuyMember {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long teamId;
+    private Long productId;
     private Long userId;
     private String orderNo;
     private Integer isLeader;

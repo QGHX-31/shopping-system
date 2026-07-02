@@ -12,6 +12,7 @@ public class GroupBuyTeam {
     private Long id;
     private String teamNo;
     private Long activityId;
+    private Long productId;
     private Long leaderId;
     private Integer requiredNum;
     private Integer currentNum;

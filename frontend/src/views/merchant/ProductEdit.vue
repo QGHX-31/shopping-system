@@ -121,8 +121,8 @@ const submitting = ref(false)
 const categoryOptions = ref<any[]>([])
 const categoryPath = ref<number[]>([])
 
-const isEdit = computed(() => !!route.query.id)
-const productId = computed(() => Number(route.query.id) || 0)
+const isEdit = computed(() => !!route.params.id)
+const productId = computed(() => Number(route.params.id) || 0)
 
 const form = reactive({
   id: 0,

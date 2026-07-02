@@ -226,15 +226,26 @@ public class GroupBuyServiceImpl implements GroupBuyService {
             return result;
         }
         
-        String stockKey = GROUP_STOCK_KEY + activityId;
-        Long stock = redisUtil.get(stockKey, Long.class);
-        if (stock == null) {
-            stock = (long) activity.getAvailableStock();
+        LambdaQueryWrapper<GroupBuyMember> memberCheckWrapper = new LambdaQueryWrapper<>();
+        memberCheckWrapper.eq(GroupBuyMember::getUserId, userId);
+        List<GroupBuyMember> members = groupBuyMemberMapper.selectList(memberCheckWrapper);
+        
+        for (GroupBuyMember member : members) {
+            GroupBuyTeam existingTeam = groupBuyTeamMapper.selectById(member.getTeamId());
+            if (existingTeam != null && existingTeam.getStatus() == 0) {
+                GroupBuyActivity existingActivity = groupBuyActivityMapper.selectById(existingTeam.getActivityId());
+                if (existingActivity != null && existingActivity.getProductId().equals(activity.getProductId())) {
+                    result.put("success", false);
+                    result.put("message", "您已在该商品上发起/参与了一个未完成的拼团，请先完成或取消");
+                    return result;
+                }
+            }
         }
         
-        if (stock <= 0) {
+        Product product = productMapper.selectById(activity.getProductId());
+        if (product == null || product.getStock() <= 0) {
             result.put("success", false);
-            result.put("message", "Insufficient stock");
+            result.put("message", "商品库存不足");
             return result;
         }
         
@@ -255,12 +266,78 @@ public class GroupBuyServiceImpl implements GroupBuyService {
         member.setIsLeader(1);
         member.setJoinTime(LocalDateTime.now());
         groupBuyMemberMapper.insert(member);
-        
-        redisUtil.decrement(stockKey, 1);
 
         Map<String, Object> mqBody = new HashMap<>();
         mqBody.put("teamNo", team.getTeamNo());
         mqBody.put("activityId", activityId);
+        mqBody.put("leaderId", userId);
+        mqBody.put("requiredNum", team.getRequiredNum());
+        mqBody.put("expireTime", team.getExpireTime().toString());
+        mqMessageSender.send(MqTopic.GROUP_CREATED, "group", team.getTeamNo(), mqBody);
+
+        result.put("success", true);
+        result.put("team", team);
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> createTeamByProduct(Long productId, Long userId) {
+        Map<String, Object> result = new HashMap<>();
+        
+        Product product = productMapper.selectById(productId);
+        if (product == null) {
+            result.put("success", false);
+            result.put("message", "商品不存在");
+            return result;
+        }
+        
+        if (product.getStock() == null || product.getStock() <= 0) {
+            result.put("success", false);
+            result.put("message", "商品库存不足");
+            return result;
+        }
+        
+        LambdaQueryWrapper<GroupBuyMember> memberCheckWrapper = new LambdaQueryWrapper<>();
+        memberCheckWrapper.eq(GroupBuyMember::getUserId, userId)
+                          .eq(GroupBuyMember::getProductId, productId);
+        List<GroupBuyMember> members = groupBuyMemberMapper.selectList(memberCheckWrapper);
+        
+        for (GroupBuyMember member : members) {
+            GroupBuyTeam existingTeam = groupBuyTeamMapper.selectById(member.getTeamId());
+            if (existingTeam != null && existingTeam.getStatus() == 0) {
+                result.put("success", false);
+                result.put("message", "您已在该商品上发起/参与了一个未完成的拼团，请先完成或取消");
+                return result;
+            }
+        }
+        
+        int requiredNum = 2;
+        int groupDuration = 24;
+        
+        GroupBuyTeam team = new GroupBuyTeam();
+        team.setTeamNo("GB" + System.currentTimeMillis() + new Random().nextInt(1000));
+        team.setActivityId(0L);
+        team.setProductId(productId);
+        team.setLeaderId(userId);
+        team.setRequiredNum(requiredNum);
+        team.setCurrentNum(1);
+        team.setStatus(0);
+        team.setExpireTime(LocalDateTime.now().plusHours(groupDuration));
+        team.setCreatedAt(LocalDateTime.now());
+        groupBuyTeamMapper.insert(team);
+        
+        GroupBuyMember member = new GroupBuyMember();
+        member.setTeamId(team.getId());
+        member.setProductId(productId);
+        member.setUserId(userId);
+        member.setIsLeader(1);
+        member.setJoinTime(LocalDateTime.now());
+        groupBuyMemberMapper.insert(member);
+
+        Map<String, Object> mqBody = new HashMap<>();
+        mqBody.put("teamNo", team.getTeamNo());
+        mqBody.put("productId", productId);
         mqBody.put("leaderId", userId);
         mqBody.put("requiredNum", team.getRequiredNum());
         mqBody.put("expireTime", team.getExpireTime().toString());
@@ -441,14 +518,8 @@ public class GroupBuyServiceImpl implements GroupBuyService {
         page = page == null || page < 1 ? 1 : page;
         size = size == null || size < 1 ? 10 : size;
         
-        LambdaQueryWrapper<GroupBuyActivity> activityWrapper = new LambdaQueryWrapper<>();
-        activityWrapper.eq(GroupBuyActivity::getProductId, productId)
-                       .eq(GroupBuyActivity::getStatus, 1)
-                       .le(GroupBuyActivity::getStartTime, LocalDateTime.now())
-                       .ge(GroupBuyActivity::getEndTime, LocalDateTime.now());
-        List<GroupBuyActivity> activities = groupBuyActivityMapper.selectList(activityWrapper);
-        
-        if (activities.isEmpty()) {
+        Product product = productMapper.selectById(productId);
+        if (product == null || product.getHasGroupBuy() == null || product.getHasGroupBuy() != 1) {
             Map<String, Object> empty = new HashMap<>();
             empty.put("list", Collections.emptyList());
             empty.put("total", 0);
@@ -457,10 +528,8 @@ public class GroupBuyServiceImpl implements GroupBuyService {
             return empty;
         }
         
-        List<Long> activityIds = activities.stream().map(GroupBuyActivity::getId).toList();
-        
         LambdaQueryWrapper<GroupBuyTeam> teamWrapper = new LambdaQueryWrapper<>();
-        teamWrapper.in(GroupBuyTeam::getActivityId, activityIds)
+        teamWrapper.eq(GroupBuyTeam::getProductId, productId)
                    .eq(GroupBuyTeam::getStatus, 0)
                    .orderByDesc(GroupBuyTeam::getCreatedAt);
         
@@ -470,11 +539,6 @@ public class GroupBuyServiceImpl implements GroupBuyService {
         List<GroupBuyTeam> teams = resultPage.getRecords();
         List<Map<String, Object>> teamList = new ArrayList<>();
         for (GroupBuyTeam team : teams) {
-            GroupBuyActivity activity = activities.stream()
-                .filter(a -> a.getId().equals(team.getActivityId()))
-                .findFirst()
-                .orElse(null);
-            
             LambdaQueryWrapper<GroupBuyMember> memberWrapper = new LambdaQueryWrapper<>();
             memberWrapper.eq(GroupBuyMember::getTeamId, team.getId());
             List<GroupBuyMember> members = groupBuyMemberMapper.selectList(memberWrapper);
@@ -502,7 +566,8 @@ public class GroupBuyServiceImpl implements GroupBuyService {
             Map<String, Object> teamMap = new HashMap<>();
             teamMap.put("team", team);
             teamMap.put("members", memberList);
-            teamMap.put("activity", activity);
+            teamMap.put("groupPrice", product.getGroupPrice());
+            teamMap.put("groupNum", product.getGroupNum());
             teamList.add(teamMap);
         }
         
