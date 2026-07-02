@@ -519,7 +519,7 @@ public class GroupBuyServiceImpl implements GroupBuyService {
         size = size == null || size < 1 ? 10 : size;
         
         Product product = productMapper.selectById(productId);
-        if (product == null || product.getHasGroupBuy() == null || product.getHasGroupBuy() != 1) {
+        if (product == null) {
             Map<String, Object> empty = new HashMap<>();
             empty.put("list", Collections.emptyList());
             empty.put("total", 0);
