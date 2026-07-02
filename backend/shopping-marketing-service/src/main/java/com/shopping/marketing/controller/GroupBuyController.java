@@ -120,6 +120,18 @@ public class GroupBuyController {
         return Result.success(result);
     }
 
+    @PostMapping("/confirm/{teamNo}")
+    public Result<Map<String, Object>> confirmJoin(@PathVariable String teamNo,
+                                                     @RequestParam Long userId,
+                                                     @RequestParam String orderNo) {
+        Map<String, Object> result = groupBuyService.confirmJoin(teamNo, userId, orderNo);
+        Boolean success = (Boolean) result.get("success");
+        if (success != null && !success) {
+            return Result.error((String) result.get("message"));
+        }
+        return Result.success(result);
+    }
+
     @GetMapping("/team/{teamNo}")
     public Result<Map<String, Object>> getTeamDetail(@PathVariable String teamNo) {
         Map<String, Object> data = groupBuyService.getTeamDetail(teamNo);

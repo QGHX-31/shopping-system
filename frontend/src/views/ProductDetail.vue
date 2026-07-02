@@ -900,16 +900,7 @@ async function handleJoinGroup(teamNo: string) {
   try {
     await ElMessageBox.confirm('确认加入该拼团？', '加入拼团', { type: 'success' })
 
-    // 1. 加入拼团团队
-    const joinForm = new FormData()
-    joinForm.append('userId', String(userStore.userInfo?.id))
-    const joinRes: any = await request.post(`/group/join/${teamNo}`, joinForm)
-    const team = joinRes.data?.team
-    if (!team) {
-      throw new Error('加入拼团失败')
-    }
-
-    // 2. 查询默认地址
+    // 1. 先检查地址
     const addrRes: any = await request.get('/address/list', {
       params: { userId: userStore.userInfo?.id }
     })
@@ -919,6 +910,15 @@ async function handleJoinGroup(teamNo: string) {
       ElMessage.warning('请先添加收货地址')
       router.push({ path: '/member', query: { tab: 'address' } })
       return
+    }
+
+    // 2. 加入拼团团队
+    const joinForm = new FormData()
+    joinForm.append('userId', String(userStore.userInfo?.id))
+    const joinRes: any = await request.post(`/group/join/${teamNo}`, joinForm)
+    const team = joinRes.data?.team
+    if (!team) {
+      throw new Error('加入拼团失败')
     }
 
     // 3. 创建关联订单

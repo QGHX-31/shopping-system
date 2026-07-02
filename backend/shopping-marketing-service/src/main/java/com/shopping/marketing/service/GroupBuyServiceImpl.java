@@ -300,7 +300,8 @@ public class GroupBuyServiceImpl implements GroupBuyService {
         
         LambdaQueryWrapper<GroupBuyMember> memberCheckWrapper = new LambdaQueryWrapper<>();
         memberCheckWrapper.eq(GroupBuyMember::getUserId, userId)
-                          .eq(GroupBuyMember::getProductId, productId);
+                          .eq(GroupBuyMember::getProductId, productId)
+                          .eq(GroupBuyMember::getStatus, 1);
         List<GroupBuyMember> members = groupBuyMemberMapper.selectList(memberCheckWrapper);
         
         for (GroupBuyMember member : members) {
@@ -321,7 +322,7 @@ public class GroupBuyServiceImpl implements GroupBuyService {
         team.setProductId(productId);
         team.setLeaderId(userId);
         team.setRequiredNum(requiredNum);
-        team.setCurrentNum(1);
+        team.setCurrentNum(0);
         team.setStatus(0);
         team.setExpireTime(LocalDateTime.now().plusHours(groupDuration));
         team.setCreatedAt(LocalDateTime.now());
@@ -332,6 +333,7 @@ public class GroupBuyServiceImpl implements GroupBuyService {
         member.setProductId(productId);
         member.setUserId(userId);
         member.setIsLeader(1);
+        member.setStatus(0);
         member.setJoinTime(LocalDateTime.now());
         groupBuyMemberMapper.insert(member);
 
@@ -457,7 +459,8 @@ public class GroupBuyServiceImpl implements GroupBuyService {
         
         LambdaQueryWrapper<GroupBuyMember> memberCheckWrapper = new LambdaQueryWrapper<>();
         memberCheckWrapper.eq(GroupBuyMember::getTeamId, team.getId())
-                         .eq(GroupBuyMember::getUserId, userId);
+                         .eq(GroupBuyMember::getUserId, userId)
+                         .eq(GroupBuyMember::getStatus, 1);
         Long existingCount = groupBuyMemberMapper.selectCount(memberCheckWrapper);
         if (existingCount > 0) {
             result.put("success", false);
@@ -469,17 +472,72 @@ public class GroupBuyServiceImpl implements GroupBuyService {
         member.setTeamId(team.getId());
         member.setUserId(userId);
         member.setIsLeader(0);
+        member.setStatus(0);
         member.setJoinTime(LocalDateTime.now());
         groupBuyMemberMapper.insert(member);
+
+        result.put("success", true);
+        result.put("team", team);
+        result.put("memberId", member.getId());
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> confirmJoin(String teamNo, Long userId, String orderNo) {
+        Map<String, Object> result = new HashMap<>();
         
-        team.setCurrentNum(team.getCurrentNum() + 1);
+        LambdaQueryWrapper<GroupBuyTeam> teamWrapper = new LambdaQueryWrapper<>();
+        teamWrapper.eq(GroupBuyTeam::getTeamNo, teamNo);
+        GroupBuyTeam team = groupBuyTeamMapper.selectOne(teamWrapper);
+        
+        if (team == null) {
+            result.put("success", false);
+            result.put("message", "团队不存在");
+            return result;
+        }
+        
+        if (team.getStatus() != 0) {
+            result.put("success", false);
+            result.put("message", "团队已结束");
+            return result;
+        }
+        
+        LambdaQueryWrapper<GroupBuyMember> memberWrapper = new LambdaQueryWrapper<>();
+        memberWrapper.eq(GroupBuyMember::getTeamId, team.getId())
+                     .eq(GroupBuyMember::getUserId, userId);
+        GroupBuyMember member = groupBuyMemberMapper.selectOne(memberWrapper);
+        
+        if (member == null) {
+            result.put("success", false);
+            result.put("message", "未找到拼团成员记录");
+            return result;
+        }
+        
+        if (member.getStatus() != null && member.getStatus() == 1) {
+            result.put("success", true);
+            result.put("message", "已确认加入");
+            result.put("team", team);
+            return result;
+        }
+        
+        member.setStatus(1);
+        member.setOrderNo(orderNo);
+        groupBuyMemberMapper.updateById(member);
+        
+        LambdaQueryWrapper<GroupBuyMember> paidMemberWrapper = new LambdaQueryWrapper<>();
+        paidMemberWrapper.eq(GroupBuyMember::getTeamId, team.getId())
+                         .eq(GroupBuyMember::getStatus, 1);
+        Long paidCount = groupBuyMemberMapper.selectCount(paidMemberWrapper);
+        
+        team.setCurrentNum(paidCount.intValue());
         groupBuyTeamMapper.updateById(team);
         
-        if (team.getCurrentNum() >= team.getRequiredNum()) {
+        if (paidCount >= team.getRequiredNum()) {
             team.setStatus(1);
             team.setSuccessTime(LocalDateTime.now());
             groupBuyTeamMapper.updateById(team);
-
+            
             Map<String, Object> mqBody = new HashMap<>();
             mqBody.put("teamNo", team.getTeamNo());
             mqBody.put("activityId", team.getActivityId());
@@ -487,7 +545,7 @@ public class GroupBuyServiceImpl implements GroupBuyService {
             mqBody.put("memberCount", team.getCurrentNum());
             mqMessageSender.send(MqTopic.GROUP_SUCCESS, "group", team.getTeamNo(), mqBody);
         }
-
+        
         result.put("success", true);
         result.put("team", team);
         return result;

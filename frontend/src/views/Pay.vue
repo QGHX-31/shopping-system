@@ -130,7 +130,10 @@ const payMethods = [
 
 const addressText = computed(() => {
   if (!order.value) return ''
-  return `${order.value.province || ''} ${order.value.city || ''} ${order.value.district || ''} ${order.value.addressDetail || ''}`
+  const name = order.value.receiverName || ''
+  const phone = order.value.receiverPhone || ''
+  const addr = order.value.receiverAddress || ''
+  return `${name} ${phone} ${addr}`.trim()
 })
 
 function formatPrice(price: any): string {
@@ -189,6 +192,17 @@ async function handlePay() {
       params: { orderNo: order.value.orderNo, payMethod: selectedMethod.value }
     })
     console.log('支付回调返回:', callbackRes)
+    
+    const groupTeamNo = route.query.groupTeamNo
+    if (groupTeamNo) {
+      try {
+        await request.post(`/group/confirm/${groupTeamNo}`, null, {
+          params: { userId: userStore.userInfo?.id, orderNo: order.value.orderNo }
+        })
+      } catch (e) {
+        console.error('确认拼团加入失败:', e)
+      }
+    }
     
     paid.value = true
     ElMessage.success('支付成功！')

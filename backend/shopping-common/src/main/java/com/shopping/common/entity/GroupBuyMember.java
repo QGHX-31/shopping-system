@@ -15,6 +15,7 @@ public class GroupBuyMember {
     private Long userId;
     private String orderNo;
     private Integer isLeader;
+    private Integer status;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime joinTime;
 }
