@@ -102,6 +102,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
       },
+      '/api/admin/coupon': {
+        target: 'http://localhost:8083',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '')
+      },
       '/api/admin': {
         target: 'http://localhost:8084',
         changeOrigin: true,

@@ -48,7 +48,7 @@ public class CouponServiceImpl implements CouponService {
         if (templateIds.isEmpty()) {
             for (UserCoupon coupon : coupons) {
                 if (coupon.getCouponLevel() == null) {
-                    coupon.setCouponLevel(coupon.getMerchantId() != null ? 2 : 1);
+                    coupon.setCouponLevel(coupon.getMerchantId() != null && coupon.getMerchantId() != 0 ? 2 : 1);
                 }
                 if (coupon.getMutuallyExclusive() == null) {
                     coupon.setMutuallyExclusive(1);
@@ -87,7 +87,7 @@ public class CouponServiceImpl implements CouponService {
             if (template != null) {
                 coupon.setMerchantId(template.getMerchantId());
                 coupon.setCouponLevel(template.getCouponLevel() != null ? template.getCouponLevel() 
-                    : (template.getMerchantId() != null ? 2 : 1));
+                    : (template.getMerchantId() != null && template.getMerchantId() != 0 ? 2 : 1));
                 coupon.setMutuallyExclusive(template.getMutuallyExclusive() != null ? template.getMutuallyExclusive() : 1);
                 coupon.setScopeType(template.getScopeType());
                 
@@ -103,7 +103,7 @@ public class CouponServiceImpl implements CouponService {
                 }
             } else {
                 if (coupon.getCouponLevel() == null) {
-                    coupon.setCouponLevel(coupon.getMerchantId() != null ? 2 : 1);
+                    coupon.setCouponLevel(coupon.getMerchantId() != null && coupon.getMerchantId() != 0 ? 2 : 1);
                 }
                 if (coupon.getMutuallyExclusive() == null) {
                     coupon.setMutuallyExclusive(1);
@@ -132,7 +132,7 @@ public class CouponServiceImpl implements CouponService {
     public Map<String, Object> getPlatformTemplates(Integer page, Integer size) {
         Page<CouponTemplate> pageObj = new Page<>(page, size);
         LambdaQueryWrapper<CouponTemplate> wrapper = new LambdaQueryWrapper<>();
-        wrapper.isNull(CouponTemplate::getMerchantId)
+        wrapper.and(w -> w.isNull(CouponTemplate::getMerchantId).or().eq(CouponTemplate::getMerchantId, 0))
                .eq(CouponTemplate::getStatus, 1)
                .le(CouponTemplate::getStartTime, LocalDateTime.now())
                .ge(CouponTemplate::getEndTime, LocalDateTime.now())
@@ -158,10 +158,10 @@ public class CouponServiceImpl implements CouponService {
             template.setRemainingCount(template.getTotalCount());
         }
         if (template.getScopeType() == null) {
-            template.setScopeType(template.getMerchantId() != null ? 2 : 1);
+            template.setScopeType(template.getMerchantId() != null && template.getMerchantId() != 0 ? 2 : 1);
         }
         if (template.getCouponLevel() == null) {
-            template.setCouponLevel(template.getMerchantId() != null ? 2 : 1);
+            template.setCouponLevel(template.getMerchantId() != null && template.getMerchantId() != 0 ? 2 : 1);
         }
         if (template.getMutuallyExclusive() == null) {
             template.setMutuallyExclusive(1);
@@ -393,15 +393,15 @@ public class CouponServiceImpl implements CouponService {
         
         Integer couponLevel = template.getCouponLevel();
         if (couponLevel == null) {
-            couponLevel = template.getMerchantId() != null ? 2 : 1;
+            couponLevel = template.getMerchantId() != null && template.getMerchantId() != 0 ? 2 : 1;
         }
         
-        if (template.getMerchantId() != null && merchantId == null) {
+        if (template.getMerchantId() != null && template.getMerchantId() != 0 && merchantId == null) {
             result.put("reason", "仅限指定店铺使用");
             return result;
         }
         
-        if (template.getMerchantId() != null && merchantId != null 
+        if (template.getMerchantId() != null && template.getMerchantId() != 0 && merchantId != null 
             && !template.getMerchantId().equals(merchantId)) {
             result.put("reason", "仅限指定店铺使用");
             return result;

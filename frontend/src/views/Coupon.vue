@@ -23,7 +23,7 @@
       
       <div v-loading="loading" class="grid">
         <el-card v-for="t in filteredTemplates" :key="t.id" class="coupon-card" :class="getCouponClass(t)" shadow="hover">
-          <div class="tag" v-if="t.couponLevel === 1 || (!t.couponLevel && t.merchantId == null)">平台券</div>
+          <div class="tag" v-if="t.couponLevel === 1 || (!t.couponLevel && (t.merchantId == null || t.merchantId === 0))">平台券</div>
           <div class="tag merchant" v-else-if="t.couponLevel === 2">店铺券</div>
           <div class="tag single" v-else-if="t.couponLevel === 3">单品券</div>
           <div class="tag merchant" v-else>店铺券</div>
@@ -121,7 +121,7 @@ const receivableCount = computed(() => {
 const filteredTemplates = computed(() => {
   if (activeTab.value === 'all') return templates.value
   if (activeTab.value === 'platform') {
-    return templates.value.filter(t => t.couponLevel === 1 || (t.merchantId == null && t.couponLevel !== 2 && t.couponLevel !== 3))
+    return templates.value.filter(t => t.couponLevel === 1 || (!t.couponLevel && (t.merchantId == null || t.merchantId === 0)))
   }
   if (activeTab.value === 'merchant') {
     return templates.value.filter(t => t.couponLevel === 2)
@@ -163,7 +163,7 @@ function getScopeText(scope: number) {
 }
 
 function getCouponClass(t: any) {
-  if (t.couponLevel === 1 || (!t.couponLevel && t.merchantId == null)) {
+  if (t.couponLevel === 1 || (!t.couponLevel && (t.merchantId == null || t.merchantId === 0))) {
     return 'platform-coupon'
   }
   if (t.couponLevel === 3) {

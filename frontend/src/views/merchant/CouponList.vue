@@ -318,7 +318,7 @@ async function loadPlatformCoupons() {
   try {
     const res = await request.get('/coupon/template/active')
     let list = (res.data?.list || []) as any[]
-    list = list.filter((c: any) => c.merchantId == null || c.merchantId === undefined)
+    list = list.filter((c: any) => c.merchantId == null || c.merchantId === undefined || c.merchantId === 0)
     if (searchKeyword.value) {
       list = list.filter((t: any) => t.name.includes(searchKeyword.value))
     }
