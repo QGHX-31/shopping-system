@@ -224,6 +224,7 @@ public class GroupBuyServiceImpl implements GroupBuyService {
 
     @Override
     @Transactional
+    @com.shopping.common.annotation.DistributedLock(key = "'groupbuy:join:' + #teamNo + ':' + #userId", waitTime = 3, leaseTime = 10)
     public Map<String, Object> joinTeam(String teamNo, Long userId) {
         Map<String, Object> result = new HashMap<>();
         

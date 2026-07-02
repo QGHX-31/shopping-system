@@ -78,6 +78,7 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @com.shopping.common.annotation.DistributedLock(key = "'order:create:' + #request.userId", waitTime = 3, leaseTime = 10)
     public Order createOrder(OrderCreateRequest request) {
         // 0. 幂等性校验：检查10秒内是否有相同商品的待支付订单
         Order duplicateOrder = checkDuplicateOrder(request);

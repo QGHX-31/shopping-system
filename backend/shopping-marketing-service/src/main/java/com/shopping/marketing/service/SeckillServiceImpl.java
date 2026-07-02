@@ -95,6 +95,7 @@ public class SeckillServiceImpl implements SeckillService {
 
     @Override
     @Transactional
+    @com.shopping.common.annotation.DistributedLock(key = "'seckill:order:' + #activityId + ':' + #userId", waitTime = 3, leaseTime = 10)
     public Map<String, Object> placeOrder(Long activityId, Long productId, Long skuId, Long userId, Integer quantity) {
         Map<String, Object> result = new HashMap<>();
         

@@ -205,6 +205,7 @@ public class CouponServiceImpl implements CouponService {
 
     @Override
     @Transactional
+    @com.shopping.common.annotation.DistributedLock(key = "'coupon:receive:' + #templateId + ':' + #userId", waitTime = 3, leaseTime = 10)
     public Map<String, Object> receiveCoupon(Long userId, Long templateId) {
         Map<String, Object> result = new HashMap<>();
         

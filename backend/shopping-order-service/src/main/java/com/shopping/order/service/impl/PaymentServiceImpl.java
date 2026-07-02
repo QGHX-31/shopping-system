@@ -31,6 +31,7 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
+    @com.shopping.common.annotation.DistributedLock(key = "'payment:create:' + #orderId", waitTime = 3, leaseTime = 10)
     public String createPayment(Long orderId, Integer payMethod) {
         Order order = orderMapper.selectById(orderId);
         if (order == null) throw new BusinessException("订单不存在");
