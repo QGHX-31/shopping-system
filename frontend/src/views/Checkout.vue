@@ -829,6 +829,7 @@ async function loadData() {
       }
       orderItems.value = selectedCartItems.map((item: any) => ({
         productId: item.productId,
+        skuId: item.skuId,
         name: item.productName,
         imageUrl: item.productImage,
         price: item.price,
@@ -839,11 +840,13 @@ async function loadData() {
       }))
     } else if (productId) {
       const pid = parseInt(productId)
+      const skuId = route.query.skuId ? parseInt(route.query.skuId as string) : undefined
       const quantity = parseInt(route.query.quantity as string) || 1
       const res = await productStore.getProductDetail(pid)
       const p = res.data
       orderItems.value = [{
         productId: p.id,
+        skuId,
         name: p.name,
         imageUrl: p.imageUrl,
         price: p.originalPrice != null ? p.originalPrice : p.price,
@@ -1128,6 +1131,7 @@ async function handleSubmit() {
       userId: userStore.userInfo?.id,
       items: orderItems.value.map(i => ({
         productId: i.productId,
+        skuId: i.skuId,
         quantity: i.quantity,
         cartId: i.cartId
       })),

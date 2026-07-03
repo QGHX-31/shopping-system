@@ -86,6 +86,7 @@
                 <el-button size="small" :type="coupon.status === 1 ? 'warning' : 'success'" @click="toggleStatus(coupon)">
                   {{ coupon.status === 1 ? '停用' : '启用' }}
                 </el-button>
+                <el-button size="small" type="primary" @click="openApplyDialog(coupon)">申请变更</el-button>
                 <el-button size="small" type="info" @click="viewCouponDetail(coupon)">详情</el-button>
               </div>
             </div>
@@ -235,6 +236,34 @@
         </div>
       </div>
     </el-dialog>
+
+    <el-dialog v-model="applyDialogVisible" title="申请变更优惠券状态" width="450px">
+      <div v-if="currentCoupon" class="apply-form">
+        <el-form :model="applyForm" label-width="100px">
+          <el-form-item label="优惠券名称">
+            <span>{{ currentCoupon.name }}</span>
+          </el-form-item>
+          <el-form-item label="当前状态">
+            <el-tag :type="currentCoupon.status === 1 ? 'success' : 'info'">
+              {{ currentCoupon.status === 1 ? '已启用' : '未启用' }}
+            </el-tag>
+          </el-form-item>
+          <el-form-item label="申请变更" required>
+            <el-radio-group v-model="applyForm.targetStatus">
+              <el-radio :value="1">申请启用</el-radio>
+              <el-radio :value="0">申请停用</el-radio>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item label="申请原因">
+            <el-input v-model="applyForm.reason" type="textarea" :rows="3" placeholder="请输入申请原因" />
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <el-button @click="applyDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitApply">提交申请</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -258,6 +287,7 @@ const productList = ref<any[]>([])
 const joinDialogVisible = ref(false)
 const createDialogVisible = ref(false)
 const detailDialogVisible = ref(false)
+const applyDialogVisible = ref(false)
 const currentCoupon = ref<any>(null)
 const joinType = ref(0)
 const dateRange = ref<any[]>([])
@@ -280,6 +310,13 @@ const createForm = reactive({
   productId: null as number | null,
   description: '',
   merchantId: 0
+})
+
+const applyForm = reactive({
+  templateId: 0,
+  merchantId: 0,
+  targetStatus: 1,
+  reason: ''
 })
 
 function formatTime(t: string) {
@@ -453,19 +490,40 @@ async function submitCreate() {
 }
 
 async function toggleStatus(coupon: any) {
-  try {
-    const newStatus = coupon.status === 1 ? 0 : 1
-    await request.put(`/coupon/template/${coupon.id}/status`, { status: newStatus })
-    ElMessage.success('操作成功')
-    coupon.status = newStatus
-  } catch (e) {
-    ElMessage.error('操作失败')
-  }
+  ElMessage.warning('商家无法直接启用/停用优惠券，请点击"申请变更"按钮向管理员申请')
 }
 
 function viewCouponDetail(coupon: any) {
   currentCoupon.value = coupon
   detailDialogVisible.value = true
+}
+
+function openApplyDialog(coupon: any) {
+  currentCoupon.value = coupon
+  applyForm.templateId = coupon.id
+  applyForm.merchantId = merchantId.value
+  applyForm.targetStatus = coupon.status === 1 ? 0 : 1
+  applyForm.reason = ''
+  applyDialogVisible.value = true
+}
+
+async function submitApply() {
+  if (applyForm.targetStatus === currentCoupon.value.status) {
+    ElMessage.warning('目标状态与当前状态相同，无需申请')
+    return
+  }
+  try {
+    await request.post('/coupon/template/apply/status', {
+      templateId: applyForm.templateId,
+      merchantId: applyForm.merchantId,
+      targetStatus: applyForm.targetStatus,
+      reason: applyForm.reason
+    })
+    ElMessage.success('申请提交成功，等待管理员审核')
+    applyDialogVisible.value = false
+  } catch (e: any) {
+    ElMessage.error(e?.message || '申请失败')
+  }
 }
 
 onMounted(() => {

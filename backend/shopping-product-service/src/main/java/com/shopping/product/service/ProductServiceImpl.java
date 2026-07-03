@@ -140,6 +140,12 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     public Product deductStock(Long productId, Integer quantity) {
+        return deductStock(productId, null, quantity);
+    }
+
+    @Override
+    @Transactional
+    public Product deductStock(Long productId, Long skuId, Integer quantity) {
         if (productId == null || quantity == null || quantity <= 0) {
             throw new BusinessException("参数错误");
         }
@@ -149,9 +155,23 @@ public class ProductServiceImpl implements ProductService {
         if (product.getStock() == null || product.getStock() < quantity) {
             throw new BusinessException(product.getName() + " 库存不足");
         }
+
+        if (skuId != null) {
+            ProductSku sku = skuMapper.selectById(skuId);
+            if (sku == null) {
+                throw new BusinessException("SKU不存在");
+            }
+            if (sku.getStock() == null || sku.getStock() < quantity) {
+                throw new BusinessException(product.getName() + " 规格库存不足");
+            }
+            ProductSku updateSku = new ProductSku();
+            updateSku.setId(skuId);
+            updateSku.setStock(sku.getStock() - quantity);
+            skuMapper.updateById(updateSku);
+        }
+
         product.setStock(product.getStock() - quantity);
         productMapper.updateById(product);
-        // 清掉缓存
         redisUtil.delete(PRODUCT_CACHE_KEY + productId);
         return productMapper.selectById(productId);
     }
@@ -159,11 +179,28 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     public Product addStock(Long productId, Integer quantity) {
+        return addStock(productId, null, quantity);
+    }
+
+    @Override
+    @Transactional
+    public Product addStock(Long productId, Long skuId, Integer quantity) {
         if (productId == null || quantity == null || quantity <= 0) {
             throw new BusinessException("参数错误");
         }
         Product product = productMapper.selectById(productId);
         if (product == null) throw new BusinessException("商品不存在: " + productId);
+
+        if (skuId != null) {
+            ProductSku sku = skuMapper.selectById(skuId);
+            if (sku != null) {
+                ProductSku updateSku = new ProductSku();
+                updateSku.setId(skuId);
+                updateSku.setStock((sku.getStock() == null ? 0 : sku.getStock()) + quantity);
+                skuMapper.updateById(updateSku);
+            }
+        }
+
         product.setStock((product.getStock() == null ? 0 : product.getStock()) + quantity);
         productMapper.updateById(product);
         redisUtil.delete(PRODUCT_CACHE_KEY + productId);

@@ -779,7 +779,7 @@ async function handleAddToCart() {
   }
   if (!product.value?.id) return
   try {
-    await cartStore.addToCart(product.value.id, quantity.value)
+    await cartStore.addToCart(product.value.id, selectedSku.value?.id, quantity.value)
     ElMessage.success(`已加入购物车 × ${quantity.value}`)
   } catch (e: any) {
     ElMessage.error(e?.message || '加入购物车失败')
@@ -804,13 +804,17 @@ async function handleBuyNow() {
     return
   }
   if (!product.value?.id) return
-  // 跳转到结算页，传递商品ID和数量
+  // 跳转到结算页，传递商品ID、SKU ID和数量
+  const query: any = {
+    productId: product.value.id,
+    quantity: quantity.value
+  }
+  if (selectedSku.value?.id) {
+    query.skuId = selectedSku.value.id
+  }
   router.push({
     path: '/checkout',
-    query: {
-      productId: product.value.id,
-      quantity: quantity.value
-    }
+    query
   })
 }
 

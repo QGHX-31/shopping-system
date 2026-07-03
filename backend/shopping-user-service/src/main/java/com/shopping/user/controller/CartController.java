@@ -30,7 +30,7 @@ public class CartController {
     @PostMapping("/add")
     public Result<Void> addToCart(HttpServletRequest request, @RequestBody Cart cart) {
         Long userId = getUserId(request);
-        cartService.addToCart(userId, cart.getProductId(), cart.getQuantity());
+        cartService.addToCart(userId, cart.getProductId(), cart.getSkuId(), cart.getQuantity());
         return Result.success();
     }
 

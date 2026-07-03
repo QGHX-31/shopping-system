@@ -6,6 +6,7 @@ import { useProductStore } from './product'
 export interface CartItem {
   id: number
   productId: number
+  skuId?: number
   productName: string
   productImage: string
   price: number
@@ -48,6 +49,7 @@ export const useCartStore = defineStore('cart', () => {
       return {
         id: item.id,
         productId: item.productId,
+        skuId: item.skuId,
         productName: productInfo.name || `商品${item.productId}`,
         productImage: productInfo.imageUrl || '',
         price: productInfo.originalPrice != null ? productInfo.originalPrice : productInfo.price || 0,
@@ -60,8 +62,12 @@ export const useCartStore = defineStore('cart', () => {
     return res
   }
 
-  async function addToCart(productId: number, quantity: number = 1) {
-    const res = await request.post('/cart/add', { productId, quantity })
+  async function addToCart(productId: number, skuId: number | undefined, quantity: number = 1) {
+    const body: any = { productId, quantity }
+    if (skuId != null) {
+      body.skuId = skuId
+    }
+    const res = await request.post('/cart/add', body)
     await getCartList()
     return res
   }

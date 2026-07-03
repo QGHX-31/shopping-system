@@ -35,10 +35,16 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart> implements Ca
     }
 
     @Override
-    public void addToCart(Long userId, Long productId, Integer quantity) {
-        Cart existing = cartMapper.selectOne(new LambdaQueryWrapper<Cart>()
+    public void addToCart(Long userId, Long productId, Long skuId, Integer quantity) {
+        LambdaQueryWrapper<Cart> wrapper = new LambdaQueryWrapper<Cart>()
                 .eq(Cart::getUserId, userId)
-                .eq(Cart::getProductId, productId));
+                .eq(Cart::getProductId, productId);
+        if (skuId != null) {
+            wrapper.eq(Cart::getSkuId, skuId);
+        } else {
+            wrapper.isNull(Cart::getSkuId);
+        }
+        Cart existing = cartMapper.selectOne(wrapper);
         if (existing != null) {
             existing.setQuantity(existing.getQuantity() + quantity);
             cartMapper.updateById(existing);
@@ -46,6 +52,7 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart> implements Ca
             Cart cart = new Cart();
             cart.setUserId(userId);
             cart.setProductId(productId);
+            cart.setSkuId(skuId);
             cart.setQuantity(quantity);
             cart.setSelected(1);
             cartMapper.insert(cart);

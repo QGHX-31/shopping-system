@@ -4,10 +4,12 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.shopping.common.entity.CouponStatusApply;
 import com.shopping.common.entity.CouponTemplate;
 import com.shopping.common.entity.Product;
 import com.shopping.common.entity.UserCoupon;
 import com.shopping.common.entity.MerchantCouponParticipation;
+import com.shopping.marketing.mapper.CouponStatusApplyMapper;
 import com.shopping.marketing.mapper.CouponTemplateMapper;
 import com.shopping.marketing.mapper.MerchantCouponParticipationMapper;
 import com.shopping.marketing.mapper.ProductMapper;
@@ -27,6 +29,9 @@ public class CouponServiceImpl implements CouponService {
 
     @Resource
     private CouponTemplateMapper couponTemplateMapper;
+    
+    @Resource
+    private CouponStatusApplyMapper couponStatusApplyMapper;
     
     @Resource
     private UserCouponMapper userCouponMapper;
@@ -722,5 +727,119 @@ public class CouponServiceImpl implements CouponService {
         result.put("results", results);
         
         return result;
+    }
+
+    @Override
+    @Transactional
+    public CouponStatusApply applyCouponStatus(Long templateId, Long merchantId, Integer targetStatus, String reason) {
+        CouponTemplate template = couponTemplateMapper.selectById(templateId);
+        if (template == null) {
+            throw new RuntimeException("优惠券模板不存在");
+        }
+        if (!merchantId.equals(template.getMerchantId())) {
+            throw new RuntimeException("无权操作该优惠券");
+        }
+        if (template.getStatus().equals(targetStatus)) {
+            throw new RuntimeException("目标状态与当前状态相同");
+        }
+        
+        LambdaQueryWrapper<CouponStatusApply> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(CouponStatusApply::getTemplateId, templateId)
+               .eq(CouponStatusApply::getApplyStatus, 0);
+        if (couponStatusApplyMapper.selectCount(wrapper) > 0) {
+            throw new RuntimeException("已有待审核的申请，请等待处理");
+        }
+        
+        CouponStatusApply apply = new CouponStatusApply();
+        apply.setTemplateId(templateId);
+        apply.setMerchantId(merchantId);
+        apply.setTargetStatus(targetStatus);
+        apply.setReason(reason);
+        apply.setApplyStatus(0);
+        apply.setCreatedAt(LocalDateTime.now());
+        apply.setUpdatedAt(LocalDateTime.now());
+        couponStatusApplyMapper.insert(apply);
+        return apply;
+    }
+
+    @Override
+    public Map<String, Object> getApplyList(Long merchantId, Integer applyStatus, Integer page, Integer size) {
+        Page<CouponStatusApply> pageObj = new Page<>(page, size);
+        LambdaQueryWrapper<CouponStatusApply> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(CouponStatusApply::getMerchantId, merchantId);
+        if (applyStatus != null) {
+            wrapper.eq(CouponStatusApply::getApplyStatus, applyStatus);
+        }
+        wrapper.orderByDesc(CouponStatusApply::getCreatedAt);
+        Page<CouponStatusApply> resultPage = couponStatusApplyMapper.selectPage(pageObj, wrapper);
+        
+        List<CouponStatusApply> records = resultPage.getRecords();
+        for (CouponStatusApply apply : records) {
+            CouponTemplate template = couponTemplateMapper.selectById(apply.getTemplateId());
+            if (template != null) {
+                apply.setReason(template.getName() + " - " + (apply.getReason() != null ? apply.getReason() : ""));
+            }
+        }
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("list", records);
+        result.put("total", resultPage.getTotal());
+        result.put("page", page);
+        result.put("size", size);
+        return result;
+    }
+
+    @Override
+    public Map<String, Object> getAdminApplyList(Integer applyStatus, Integer page, Integer size) {
+        Page<CouponStatusApply> pageObj = new Page<>(page, size);
+        LambdaQueryWrapper<CouponStatusApply> wrapper = new LambdaQueryWrapper<>();
+        if (applyStatus != null) {
+            wrapper.eq(CouponStatusApply::getApplyStatus, applyStatus);
+        }
+        wrapper.orderByDesc(CouponStatusApply::getCreatedAt);
+        Page<CouponStatusApply> resultPage = couponStatusApplyMapper.selectPage(pageObj, wrapper);
+        
+        List<CouponStatusApply> records = resultPage.getRecords();
+        for (CouponStatusApply apply : records) {
+            CouponTemplate template = couponTemplateMapper.selectById(apply.getTemplateId());
+            if (template != null) {
+                apply.setReason(template.getName() + " - " + (apply.getReason() != null ? apply.getReason() : ""));
+            }
+        }
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("list", records);
+        result.put("total", resultPage.getTotal());
+        result.put("page", page);
+        result.put("size", size);
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public boolean handleApply(Long applyId, Integer applyStatus, String adminRemark) {
+        CouponStatusApply apply = couponStatusApplyMapper.selectById(applyId);
+        if (apply == null) {
+            return false;
+        }
+        if (apply.getApplyStatus() != 0) {
+            return false;
+        }
+        
+        apply.setApplyStatus(applyStatus);
+        apply.setAdminRemark(adminRemark);
+        apply.setUpdatedAt(LocalDateTime.now());
+        couponStatusApplyMapper.updateById(apply);
+        
+        if (applyStatus == 1) {
+            CouponTemplate template = couponTemplateMapper.selectById(apply.getTemplateId());
+            if (template != null) {
+                template.setStatus(apply.getTargetStatus());
+                template.setUpdatedAt(LocalDateTime.now());
+                couponTemplateMapper.updateById(template);
+            }
+        }
+        
+        return true;
     }
 }

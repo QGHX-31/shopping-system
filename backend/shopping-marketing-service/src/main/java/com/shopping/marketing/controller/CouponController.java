@@ -1,5 +1,6 @@
 package com.shopping.marketing.controller;
 
+import com.shopping.common.entity.CouponStatusApply;
 import com.shopping.common.entity.CouponTemplate;
 import com.shopping.common.entity.UserCoupon;
 import com.shopping.common.utils.Result;
@@ -140,6 +141,41 @@ public class CouponController {
                                                                    @RequestParam(required = false) List<Long> productIds,
                                                                    @RequestParam(required = false) List<Long> categoryIds) {
         Map<String, Object> result = couponService.receiveAllAvailableCoupons(userId, merchantId, productIds, categoryIds);
+        return Result.success(result);
+    }
+
+    @PostMapping("/template/apply/status")
+    public Result<CouponStatusApply> applyCouponStatus(@RequestBody Map<String, Object> params) {
+        Long templateId = Long.valueOf(params.get("templateId").toString());
+        Long merchantId = Long.valueOf(params.get("merchantId").toString());
+        Integer targetStatus = Integer.valueOf(params.get("targetStatus").toString());
+        String reason = params.get("reason") != null ? params.get("reason").toString() : "";
+        CouponStatusApply result = couponService.applyCouponStatus(templateId, merchantId, targetStatus, reason);
+        return Result.success(result);
+    }
+
+    @GetMapping("/template/apply/list")
+    public Result<Map<String, Object>> getApplyList(@RequestParam Long merchantId,
+                                                     @RequestParam(required = false) Integer applyStatus,
+                                                     @RequestParam(defaultValue = "1") Integer page,
+                                                     @RequestParam(defaultValue = "10") Integer size) {
+        Map<String, Object> result = couponService.getApplyList(merchantId, applyStatus, page, size);
+        return Result.success(result);
+    }
+
+    @GetMapping("/template/apply/admin/list")
+    public Result<Map<String, Object>> getAdminApplyList(@RequestParam(required = false) Integer applyStatus,
+                                                          @RequestParam(defaultValue = "1") Integer page,
+                                                          @RequestParam(defaultValue = "10") Integer size) {
+        Map<String, Object> result = couponService.getAdminApplyList(applyStatus, page, size);
+        return Result.success(result);
+    }
+
+    @PutMapping("/template/apply/{applyId}/handle")
+    public Result<Boolean> handleApply(@PathVariable Long applyId,
+                                        @RequestParam Integer applyStatus,
+                                        @RequestParam(required = false) String adminRemark) {
+        boolean result = couponService.handleApply(applyId, applyStatus, adminRemark);
         return Result.success(result);
     }
 }

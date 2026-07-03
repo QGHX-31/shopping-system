@@ -83,15 +83,17 @@ public class ProductController {
     /** 订单服务用：扣减库存（库存不足会抛 BusinessException） */
     @PostMapping("/deductStock")
     public Result<Product> deductStock(@RequestParam Long productId,
-                                       @RequestParam Integer quantity) {
-        return Result.success(productService.deductStock(productId, quantity));
+                                       @RequestParam Integer quantity,
+                                       @RequestParam(required = false) Long skuId) {
+        return Result.success(productService.deductStock(productId, skuId, quantity));
     }
 
     /** 订单服务用：恢复库存（取消订单时） */
     @PostMapping("/addStock")
     public Result<Product> addStock(@RequestParam Long productId,
-                                     @RequestParam Integer quantity) {
-        return Result.success(productService.addStock(productId, quantity));
+                                     @RequestParam Integer quantity,
+                                     @RequestParam(required = false) Long skuId) {
+        return Result.success(productService.addStock(productId, skuId, quantity));
     }
 
     /** 订单服务用：增加销量（支付成功回调时） */

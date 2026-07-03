@@ -12,6 +12,7 @@ public class Cart {
     private Long id;
     private Long userId;
     private Long productId;
+    private Long skuId;
     private Integer quantity;
     private Integer selected;
     @TableField(fill = FieldFill.INSERT)

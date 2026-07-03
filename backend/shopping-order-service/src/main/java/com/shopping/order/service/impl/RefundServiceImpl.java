@@ -370,17 +370,20 @@ public class RefundServiceImpl implements RefundService {
                 try {
                     if (productClient != null) {
                         try {
-                            productClient.addStock(item.getProductId(), item.getQuantity());
-                            log.info("退款恢复库存(Feign): productId={}, quantity={}", item.getProductId(), item.getQuantity());
+                            productClient.addStock(item.getProductId(), item.getQuantity(), item.getSkuId());
+                            log.info("退款恢复库存(Feign): productId={}, skuId={}, quantity={}", item.getProductId(), item.getSkuId(), item.getQuantity());
                             continue;
                         } catch (Exception e) {
                             log.warn("Feign调用恢复库存失败，降级使用RestTemplate: productId={}", item.getProductId(), e);
                         }
                     }
-                    String url = productServiceUrl + "/product/addStock?productId=" + item.getProductId()
-                            + "&quantity=" + item.getQuantity();
-                    restTemplate.postForEntity(url, null, java.util.Map.class);
-                    log.info("退款恢复库存(RestTemplate): productId={}, quantity={}", item.getProductId(), item.getQuantity());
+                    StringBuilder url = new StringBuilder(productServiceUrl + "/product/addStock?productId=" + item.getProductId()
+                            + "&quantity=" + item.getQuantity());
+                    if (item.getSkuId() != null) {
+                        url.append("&skuId=").append(item.getSkuId());
+                    }
+                    restTemplate.postForEntity(url.toString(), null, java.util.Map.class);
+                    log.info("退款恢复库存(RestTemplate): productId={}, skuId={}, quantity={}", item.getProductId(), item.getSkuId(), item.getQuantity());
                 } catch (Exception e) {
                     log.error("恢复单个商品库存失败: productId={}", item.getProductId(), e);
                 }

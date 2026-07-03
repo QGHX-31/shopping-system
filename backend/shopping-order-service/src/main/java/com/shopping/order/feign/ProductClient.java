@@ -12,10 +12,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 public interface ProductClient {
 
     @PostMapping("/product/addStock")
-    Result<Product> addStock(@RequestParam Long productId, @RequestParam Integer quantity);
+    Result<Product> addStock(@RequestParam Long productId, @RequestParam Integer quantity, @RequestParam(required = false) Long skuId);
 
     @PostMapping("/product/deductStock")
-    Result<Product> deductStock(@RequestParam Long productId, @RequestParam Integer quantity);
+    Result<Product> deductStock(@RequestParam Long productId, @RequestParam Integer quantity, @RequestParam(required = false) Long skuId);
 
     @GetMapping("/product/detail/{id}")
     Result<Product> getById(@PathVariable("id") Long id);

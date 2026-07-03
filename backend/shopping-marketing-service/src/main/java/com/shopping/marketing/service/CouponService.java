@@ -1,5 +1,6 @@
 package com.shopping.marketing.service;
 
+import com.shopping.common.entity.CouponStatusApply;
 import com.shopping.common.entity.CouponTemplate;
 import com.shopping.common.entity.UserCoupon;
 
@@ -40,4 +41,12 @@ public interface CouponService {
     Map<String, Object> receiveAllAvailableCoupons(Long userId, Long merchantId, List<Long> productIds, List<Long> categoryIds);
     
     List<CouponTemplate> getReceivableTemplates(Long userId, Long merchantId, List<Long> productIds, List<Long> categoryIds);
+    
+    CouponStatusApply applyCouponStatus(Long templateId, Long merchantId, Integer targetStatus, String reason);
+    
+    Map<String, Object> getApplyList(Long merchantId, Integer applyStatus, Integer page, Integer size);
+    
+    Map<String, Object> getAdminApplyList(Integer applyStatus, Integer page, Integer size);
+    
+    boolean handleApply(Long applyId, Integer applyStatus, String adminRemark);
 }

@@ -7,7 +7,7 @@ import java.util.List;
 
 public interface CartService extends IService<Cart> {
     List<Cart> getCartList(Long userId);
-    void addToCart(Long userId, Long productId, Integer quantity);
+    void addToCart(Long userId, Long productId, Long skuId, Integer quantity);
     void updateCart(Long cartId, Integer quantity);
     void deleteCart(Long cartId);
     void batchDelete(List<Long> cartIds);

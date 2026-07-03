@@ -35,7 +35,7 @@
       </el-table-column>
       <el-table-column label="操作" width="180">
         <template #default="scope">
-          <el-button size="small" @click="editStock(scope.row)">调整库存</el-button>
+
           <el-button size="small" type="warning" @click="editSku(scope.row)">编辑</el-button>
           <el-button size="small" type="danger" @click="deleteSku(scope.row)">删除</el-button>
         </template>
@@ -213,11 +213,6 @@ async function addSku() {
   }
 }
 
-function editStock(row: any) {
-  editingSku.value = row
-  stockForm.changeAmount = 0
-  showStockDialog.value = true
-}
 
 async function saveStock() {
   try {

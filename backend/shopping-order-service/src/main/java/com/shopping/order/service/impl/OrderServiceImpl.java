@@ -119,11 +119,11 @@ public class OrderServiceImpl implements OrderService {
         // 4. 扣减库存（预占库存）
         List<OrderItemRequest> deductedItems = new ArrayList<>();
         for (OrderItemRequest item : request.getItems()) {
-            Boolean ok = callProductDeductStock(item.getProductId(), item.getQuantity());
+            Boolean ok = callProductDeductStock(item.getProductId(), item.getSkuId(), item.getQuantity());
             if (!Boolean.TRUE.equals(ok)) {
                 // 回滚已扣减的库存
                 for (OrderItemRequest d : deductedItems) {
-                    callProductAddStock(d.getProductId(), d.getQuantity());
+                    callProductAddStock(d.getProductId(), d.getSkuId(), d.getQuantity());
                 }
                 throw new BusinessException("库存扣减失败");
             }
@@ -472,7 +472,7 @@ public class OrderServiceImpl implements OrderService {
         } catch (Exception e) {
             // 创建订单失败，回滚已扣减的库存
             for (OrderItemRequest item : deductedItems) {
-                callProductAddStock(item.getProductId(), item.getQuantity());
+                callProductAddStock(item.getProductId(), item.getSkuId(), item.getQuantity());
             }
             throw e;
         }
@@ -637,7 +637,7 @@ public class OrderServiceImpl implements OrderService {
         List<OrderItem> items = orderItemMapper.selectList(
                 new LambdaQueryWrapper<OrderItem>().eq(OrderItem::getOrderId, order.getId()));
         for (OrderItem item : items) {
-            callProductAddStock(item.getProductId(), item.getQuantity());
+            callProductAddStock(item.getProductId(), item.getSkuId(), item.getQuantity());
         }
 
         releaseLockedCoupons(order.getOrderNo());
@@ -1069,11 +1069,11 @@ public class OrderServiceImpl implements OrderService {
         }
     }
 
-    private Boolean callProductDeductStock(Long productId, Integer quantity) {
+    private Boolean callProductDeductStock(Long productId, Long skuId, Integer quantity) {
         try {
             if (productClient != null) {
                 try {
-                    Result<Product> result = productClient.deductStock(productId, quantity);
+                    Result<Product> result = productClient.deductStock(productId, quantity, skuId);
                     if (result != null && result.getCode() != null && result.getCode() == 200) {
                         return true;
                     }
@@ -1081,8 +1081,11 @@ public class OrderServiceImpl implements OrderService {
                     log.warn("Feign调用扣减库存失败，降级使用RestTemplate: productId={}", productId, e);
                 }
             }
-            String url = productServiceUrl + "/product/deductStock?productId=" + productId + "&quantity=" + quantity;
-            ResponseEntity<Map> resp = restTemplate.postForEntity(url, null, Map.class);
+            StringBuilder url = new StringBuilder(productServiceUrl + "/product/deductStock?productId=" + productId + "&quantity=" + quantity);
+            if (skuId != null) {
+                url.append("&skuId=").append(skuId);
+            }
+            ResponseEntity<Map> resp = restTemplate.postForEntity(url.toString(), null, Map.class);
             Map body = resp.getBody();
             return body != null && Integer.valueOf(200).equals(body.get("code"));
         } catch (Exception e) {
@@ -1091,18 +1094,21 @@ public class OrderServiceImpl implements OrderService {
         }
     }
 
-    private void callProductAddStock(Long productId, Integer quantity) {
+    private void callProductAddStock(Long productId, Long skuId, Integer quantity) {
         try {
             if (productClient != null) {
                 try {
-                    productClient.addStock(productId, quantity);
+                    productClient.addStock(productId, quantity, skuId);
                     return;
                 } catch (Exception e) {
                     log.warn("Feign调用恢复库存失败，降级使用RestTemplate: productId={}", productId, e);
                 }
             }
-            String url = productServiceUrl + "/product/addStock?productId=" + productId + "&quantity=" + quantity;
-            restTemplate.postForEntity(url, null, Map.class);
+            StringBuilder url = new StringBuilder(productServiceUrl + "/product/addStock?productId=" + productId + "&quantity=" + quantity);
+            if (skuId != null) {
+                url.append("&skuId=").append(skuId);
+            }
+            restTemplate.postForEntity(url.toString(), null, Map.class);
         } catch (Exception e) {
             log.error("恢复库存失败", e);
         }
