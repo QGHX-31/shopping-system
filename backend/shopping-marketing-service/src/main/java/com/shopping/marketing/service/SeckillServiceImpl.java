@@ -49,9 +49,11 @@ public class SeckillServiceImpl implements SeckillService {
 
     @Override
     public Map<String, Object> getActiveActivities() {
+        LocalDateTime now = LocalDateTime.now();
         LambdaQueryWrapper<SeckillActivity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SeckillActivity::getStatus, 1)
-               .ge(SeckillActivity::getEndTime, LocalDateTime.now())
+               .le(SeckillActivity::getStartTime, now)
+               .ge(SeckillActivity::getEndTime, now)
                .orderByAsc(SeckillActivity::getStartTime)
                .last("LIMIT 20");
         List<SeckillActivity> activities = seckillActivityMapper.selectList(wrapper);
@@ -67,7 +69,7 @@ public class SeckillServiceImpl implements SeckillService {
             map.put("totalStock", activity.getTotalStock());
             map.put("availableStock", activity.getAvailableStock());
             map.put("startTime", activity.getStartTime());
-            map.put("endTime", activity.getEndTime());
+            map.put("endTime", activity.getEndTime() != null ? java.sql.Timestamp.valueOf(activity.getEndTime()).getTime() : null);
             map.put("status", activity.getStatus());
             
             if (activity.getProductId() != null) {
@@ -75,7 +77,9 @@ public class SeckillServiceImpl implements SeckillService {
                 if (product != null) {
                     map.put("productName", product.getName());
                     map.put("imageUrl", product.getImageUrl());
-                    map.put("salesCount", product.getSalesCount());
+                    map.put("salesCount", activity.getTotalStock() - activity.getAvailableStock());
+                    map.put("groupPrice", product.getGroupPrice() != null ? product.getGroupPrice() : product.getPrice());
+                    map.put("productOriginalPrice", product.getOriginalPrice());
                 } else {
                     map.put("productName", "未知商品");
                     map.put("imageUrl", "");
@@ -108,8 +112,48 @@ public class SeckillServiceImpl implements SeckillService {
         
         Page<SeckillActivity> resultPage = seckillActivityMapper.selectPage(pageObj, wrapper);
         
+        LocalDateTime now = LocalDateTime.now();
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (SeckillActivity activity : resultPage.getRecords()) {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", activity.getId());
+            map.put("name", activity.getName());
+            map.put("merchantId", activity.getMerchantId());
+            map.put("productId", activity.getProductId());
+            map.put("skuId", activity.getSkuId());
+            map.put("seckillPrice", activity.getSeckillPrice());
+            map.put("originalPrice", activity.getOriginalPrice());
+            map.put("totalStock", activity.getTotalStock());
+            map.put("availableStock", activity.getAvailableStock());
+            map.put("startTime", activity.getStartTime());
+            map.put("endTime", activity.getEndTime());
+            
+            Integer actualStatus = activity.getStatus();
+            if (activity.getStartTime() != null && now.isBefore(activity.getStartTime())) {
+                actualStatus = 0;
+            } else if (activity.getEndTime() != null && now.isAfter(activity.getEndTime())) {
+                actualStatus = 2;
+            }
+            map.put("status", actualStatus);
+            map.put("description", activity.getDescription());
+            map.put("banner", activity.getBanner());
+            map.put("createdAt", activity.getCreatedAt());
+            map.put("updatedAt", activity.getUpdatedAt());
+            
+            if (activity.getProductId() != null) {
+                Product product = productMapper.selectById(activity.getProductId());
+                if (product != null) {
+                    map.put("productName", product.getName());
+                    map.put("groupPrice", product.getGroupPrice() != null ? product.getGroupPrice() : product.getPrice());
+                    map.put("productOriginalPrice", product.getOriginalPrice());
+                    map.put("hasGroupBuy", product.getHasGroupBuy());
+                }
+            }
+            list.add(map);
+        }
+        
         Map<String, Object> result = new HashMap<>();
-        result.put("list", resultPage.getRecords());
+        result.put("list", list);
         result.put("total", resultPage.getTotal());
         result.put("page", page);
         result.put("size", size);
@@ -136,6 +180,16 @@ public class SeckillServiceImpl implements SeckillService {
     @Override
     @Transactional
     public SeckillActivity createActivity(SeckillActivity activity) {
+        if (activity.getProductId() != null) {
+            LambdaQueryWrapper<SeckillActivity> existWrapper = new LambdaQueryWrapper<>();
+            existWrapper.eq(SeckillActivity::getProductId, activity.getProductId())
+                       .eq(SeckillActivity::getStatus, 1);
+            long count = seckillActivityMapper.selectCount(existWrapper);
+            if (count > 0) {
+                throw new BusinessException("该商品已有进行中的秒杀活动");
+            }
+        }
+        
         if (activity.getProductId() != null && activity.getSeckillPrice() != null) {
             Product product = productMapper.selectById(activity.getProductId());
             if (product != null && product.getPrice() != null) {
@@ -164,6 +218,17 @@ public class SeckillServiceImpl implements SeckillService {
         if (exist == null) {
             return null;
         }
+        
+        if (activity.getProductId() != null && !activity.getProductId().equals(exist.getProductId())) {
+            LambdaQueryWrapper<SeckillActivity> existWrapper = new LambdaQueryWrapper<>();
+            existWrapper.eq(SeckillActivity::getProductId, activity.getProductId())
+                       .eq(SeckillActivity::getStatus, 1);
+            long count = seckillActivityMapper.selectCount(existWrapper);
+            if (count > 0) {
+                throw new BusinessException("该商品已有进行中的秒杀活动");
+            }
+        }
+        
         if (activity.getSeckillPrice() != null) {
             Long productId = activity.getProductId() != null ? activity.getProductId() : exist.getProductId();
             if (productId != null) {

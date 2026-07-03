@@ -1,6 +1,7 @@
 package com.shopping.common.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -19,7 +20,9 @@ public class SeckillActivity {
     private BigDecimal originalPrice;
     private Integer totalStock;
     private Integer availableStock;
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime startTime;
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime endTime;
     private Integer status;
     private String description;

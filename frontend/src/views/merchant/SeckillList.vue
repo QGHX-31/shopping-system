@@ -10,7 +10,16 @@
       <el-table-column prop="name" label="活动名称" />
       <el-table-column prop="productName" label="商品" />
       <el-table-column prop="seckillPrice" label="秒杀价" width="100" />
-      <el-table-column prop="originalPrice" label="原价" width="100" />
+      <el-table-column label="拼团价" width="100">
+        <template #default="scope">
+          {{ scope.row.groupPrice || '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column label="原价" width="100">
+        <template #default="scope">
+          {{ scope.row.productOriginalPrice || scope.row.originalPrice || '-' }}
+        </template>
+      </el-table-column>
       <el-table-column prop="totalStock" label="总库存" width="100" />
       <el-table-column prop="availableStock" label="剩余库存" width="100" />
       <el-table-column prop="startTime" label="开始时间" width="180" />
@@ -49,11 +58,17 @@
             <el-option v-for="p in productList" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="秒杀价">
-          <el-input-number v-model="editForm.seckillPrice" :min="0" :precision="2" style="width: 100%;" />
-        </el-form-item>
         <el-form-item label="原价">
           <el-input-number v-model="editForm.originalPrice" :min="0" :precision="2" style="width: 100%;" />
+        </el-form-item>
+        <el-form-item label="拼团价">
+          <div style="line-height: 32px; color: #e6a23c; font-weight: bold;">
+            {{ editForm.groupPrice || '-' }}
+            <span style="font-size: 12px; color: #909399; font-weight: normal; margin-left: 8px;">（秒杀价需低于拼团价）</span>
+          </div>
+        </el-form-item>
+        <el-form-item label="秒杀价">
+          <el-input-number v-model="editForm.seckillPrice" :min="0" :precision="2" style="width: 100%;" />
         </el-form-item>
         <el-form-item label="总库存">
           <el-input-number v-model="editForm.totalStock" :min="1" style="width: 100%;" />
@@ -102,6 +117,7 @@ const editForm = reactive({
   skuId: null as number | null,
   seckillPrice: 0,
   originalPrice: 0,
+  groupPrice: 0,
   totalStock: 0,
   availableStock: 0,
   dateRange: [] as Date[],
@@ -144,14 +160,20 @@ const loadList = async () => {
 
 const loadProducts = async () => {
   try {
-    const res = await merchantRequest.get('/merchant/product/list', {
-      params: {
-        merchantId,
-        page: 1,
-        size: 100
-      }
-    })
-    productList.value = res.data.list || []
+    const [productRes, seckillRes] = await Promise.all([
+      merchantRequest.get('/merchant/product/list', {
+        params: { merchantId, page: 1, size: 100 }
+      }),
+      merchantRequest.get('/seckill/activity/list', {
+        params: { merchantId, status: 1 }
+      })
+    ])
+    
+    const allProducts = productRes.data.list || []
+    const activeSeckills = seckillRes.data.list || []
+    const usedProductIds = new Set(activeSeckills.map((s: any) => s.productId))
+    
+    productList.value = allProducts.filter((p: any) => !usedProductIds.has(p.id))
   } catch (error) {
     console.error('加载商品列表失败', error)
   }
@@ -163,7 +185,10 @@ const handleProductChange = async (productId: number) => {
     const res = await merchantRequest.get(`/product/${productId}`)
     const product = res.data
     if (product) {
-      editForm.originalPrice = product.price || 0
+      editForm.originalPrice = product.originalPrice || product.price || 0
+      const groupPrice = product.groupPrice || product.price || 0
+      editForm.groupPrice = groupPrice
+      editForm.seckillPrice = groupPrice ? Math.floor(groupPrice * 0.8) : 0
     }
   } catch (error) {
     console.error('获取商品信息失败', error)
@@ -176,6 +201,7 @@ const openCreateDialog = () => {
   editForm.skuId = null
   editForm.seckillPrice = 0
   editForm.originalPrice = 0
+  editForm.groupPrice = 0
   editForm.totalStock = 0
   editForm.availableStock = 0
   editForm.dateRange = []
@@ -188,7 +214,8 @@ const editActivity = async (row: any) => {
   editForm.productId = row.productId
   editForm.skuId = row.skuId
   editForm.seckillPrice = row.seckillPrice || row.price
-  editForm.originalPrice = row.originalPrice
+  editForm.originalPrice = row.productOriginalPrice || row.originalPrice
+  editForm.groupPrice = row.groupPrice || 0
   editForm.totalStock = row.totalStock
   editForm.availableStock = row.availableStock
   editForm.dateRange = row.startTime && row.endTime ? [new Date(row.startTime), new Date(row.endTime)] : []
@@ -201,8 +228,8 @@ const saveActivity = async () => {
     ElMessage.warning('请选择商品')
     return
   }
-  if (editForm.seckillPrice >= editForm.originalPrice) {
-    ElMessage.warning('秒杀价必须低于原价')
+  if (editForm.groupPrice && editForm.seckillPrice >= editForm.groupPrice) {
+    ElMessage.warning('秒杀价必须低于拼团价')
     return
   }
   if (!editForm.dateRange || editForm.dateRange.length < 2) {
@@ -214,6 +241,11 @@ const saveActivity = async () => {
     const productRes = await merchantRequest.get(`/product/${editForm.productId}`)
     const productName = productRes.data?.name || editForm.productId
 
+    const formatDateTime = (date: Date) => {
+      const pad = (n: number) => n.toString().padStart(2, '0')
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+    }
+
     const data = {
       name: `${productName} 秒杀活动`,
       merchantId,
@@ -223,8 +255,8 @@ const saveActivity = async () => {
       originalPrice: editForm.originalPrice,
       totalStock: editForm.totalStock,
       availableStock: editForm.totalStock,
-      startTime: editForm.dateRange[0]?.toISOString(),
-      endTime: editForm.dateRange[1]?.toISOString(),
+      startTime: editForm.dateRange[0] ? formatDateTime(editForm.dateRange[0]) : null,
+      endTime: editForm.dateRange[1] ? formatDateTime(editForm.dateRange[1]) : null,
       description: editForm.description
     }
 

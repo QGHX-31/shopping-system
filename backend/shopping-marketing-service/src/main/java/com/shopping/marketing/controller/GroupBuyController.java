@@ -245,9 +245,9 @@ public class GroupBuyController {
             item.put("productId", product.getId());
             item.put("productName", product.getName());
             item.put("imageUrl", product.getImageUrl());
-            item.put("groupPrice", product.getPrice());
+            item.put("groupPrice", product.getGroupPrice() != null ? product.getGroupPrice() : product.getPrice());
             item.put("originalPrice", product.getOriginalPrice() != null ? product.getOriginalPrice() : product.getPrice());
-            item.put("requiredNum", 2);
+            item.put("requiredNum", product.getGroupNum() != null ? product.getGroupNum() : 2);
             item.put("salesCount", product.getSalesCount());
             
             LambdaQueryWrapper<GroupBuyTeam> teamWrapper = new LambdaQueryWrapper<>();

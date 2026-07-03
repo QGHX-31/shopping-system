@@ -116,19 +116,13 @@
             <h2>限时秒杀</h2>
             <span class="sub-title">SECKILL · 抢到就是赚到</span>
           </div>
-          <div class="countdown">
-            <span class="cd-label">{{ seckillEnd ? '距离结束' : '加载中...' }}</span>
-            <span class="cd-time">{{ cd.h }}</span>:
-            <span class="cd-time">{{ cd.m }}</span>:
-            <span class="cd-time">{{ cd.s }}</span>
-          </div>
           <router-link to="/seckill" class="more-link">更多秒杀 ›</router-link>
         </div>
 
         <div v-loading="loadingSeckill" class="seckill-grid">
-          <el-empty v-if="!loadingSeckill && seckillList.length === 0" description="暂无秒杀商品" />
+          <el-empty v-if="!loadingSeckill && activeSeckillList.length === 0" description="暂无秒杀商品" />
           <div
-            v-for="p in seckillList"
+            v-for="p in activeSeckillList"
             :key="p.id"
             class="seckill-card"
             @click="goProduct(p.productId)"
@@ -142,6 +136,12 @@
               <div class="seckill-price">
                 <span class="now">¥{{ Number(p.seckillPrice).toFixed(2) }}</span>
                 <span class="old">¥{{ Number(p.originalPrice).toFixed(2) }}</span>
+              </div>
+              <div class="seckill-countdown">
+                <span class="cd-label">距结束</span>
+                <span class="cd-time">{{ p._cd?.h || '00' }}</span>:
+                <span class="cd-time">{{ p._cd?.m || '00' }}</span>:
+                <span class="cd-time">{{ p._cd?.s || '00' }}</span>
               </div>
               <div class="seckill-progress">
                 <div class="bar" :style="{ width: progress(p) + '%' }"></div>
@@ -385,27 +385,37 @@ const notices = ref([
 
 // ========== 秒杀 ==========
 const seckillList = ref<any[]>([])
+const activeSeckillList = ref<any[]>([])
 const loadingSeckill = ref(false)
-const seckillEnd = ref<number>(0)
-const cd = ref({ h: '--', m: '--', s: '--' })
 let cdTimer: any = null
 
 function pad(n: number) { return n < 10 ? '0' + n : '' + n }
 
-function startCountdown(endTime: number) {
-  seckillEnd.value = endTime
+function calcRemain(endTime: number) {
+  const diff = Math.max(0, endTime - Date.now())
+  const h = Math.floor(diff / 3_600_000)
+  const m = Math.floor((diff % 3_600_000) / 60_000)
+  const s = Math.floor((diff % 60_000) / 1000)
+  return { h: pad(h), m: pad(m), s: pad(s), diff }
+}
+
+function startCountdownLoop() {
   if (cdTimer) clearInterval(cdTimer)
   cdTimer = setInterval(() => {
-    const diff = Math.max(0, endTime - Date.now())
-    if (diff <= 0) {
-      cd.value = { h: '00', m: '00', s: '00' }
-      clearInterval(cdTimer)
-      return
+    const now = Date.now()
+    let changed = false
+    for (const p of seckillList.value) {
+      if (!p.endTime) continue
+      const diff = Math.max(0, p.endTime - now)
+      const h = Math.floor(diff / 3_600_000)
+      const m = Math.floor((diff % 3_600_000) / 60_000)
+      const s = Math.floor((diff % 60_000) / 1000)
+      p._cd = { h: pad(h), m: pad(m), s: pad(s) }
+      if (diff <= 0) changed = true
     }
-    const h = Math.floor(diff / 3_600_000)
-    const m = Math.floor((diff % 3_600_000) / 60_000)
-    const s = Math.floor((diff % 60_000) / 1000)
-    cd.value = { h: pad(h), m: pad(m), s: pad(s) }
+    if (changed) {
+      activeSeckillList.value = seckillList.value.filter(p => p.endTime && p.endTime > Date.now())
+    }
   }, 1000)
 }
 
@@ -414,16 +424,18 @@ async function loadSeckill() {
   try {
     const res = await request.get('/activity/seckill/active')
     const list: any[] = res.data || []
-    // 直接取已审核通过的秒杀商品
     seckillList.value = list.slice(0, 6)
-    // 设置倒计时（如果有结束时间）
-    if (list.length > 0 && list[0].endTime) {
-      startCountdown(Number(list[0].endTime))
-    } else {
-      cd.value = { h: '00', m: '00', s: '00' }
+    for (const p of seckillList.value) {
+      if (p.endTime) {
+        const remain = calcRemain(Number(p.endTime))
+        p._cd = { h: remain.h, m: remain.m, s: remain.s }
+      }
     }
+    activeSeckillList.value = seckillList.value.filter(p => !p.endTime || p.endTime > Date.now())
+    startCountdownLoop()
   } catch {
     seckillList.value = []
+    activeSeckillList.value = []
   } finally {
     loadingSeckill.value = false
   }
@@ -897,6 +909,24 @@ onUnmounted(() => { if (cdTimer) clearInterval(cdTimer) })
       margin-bottom: 6px;
       .now { color: #ff5b5b; font-size: 18px; font-weight: bold; }
       .old { color: #999; font-size: 12px; text-decoration: line-through; }
+    }
+    .seckill-countdown {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 6px;
+      font-size: 11px;
+      .cd-label { color: #666; }
+      .cd-time {
+        display: inline-block;
+        padding: 1px 5px;
+        background: #2b2b2b;
+        border-radius: 3px;
+        color: #fff;
+        font-weight: 600;
+        min-width: 22px;
+        text-align: center;
+      }
     }
     .seckill-progress {
       position: relative;

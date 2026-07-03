@@ -3,10 +3,10 @@
     <Header />
     <div class="banner">⚡ 限时秒杀 · 抢到就是赚到</div>
     <div class="container">
-      <el-empty v-if="!loading && list.length === 0" description="暂无秒杀商品" />
+      <el-empty v-if="!loading && activeList.length === 0" description="暂无秒杀商品" />
       <div v-loading="loading" class="product-grid">
         <div
-          v-for="p in list"
+          v-for="p in activeList"
           :key="p.id"
           class="product-card"
           @click="goProduct(p.productId)"
@@ -20,6 +20,12 @@
             <div class="price-row">
               <span class="seckill-price">¥{{ Number(p.seckillPrice).toFixed(2) }}</span>
               <span class="original-price">¥{{ Number(p.originalPrice).toFixed(2) }}</span>
+            </div>
+            <div class="countdown-row">
+              <span class="cd-label">距结束</span>
+              <span class="cd-time">{{ p._cd?.h || '00' }}</span>:
+              <span class="cd-time">{{ p._cd?.m || '00' }}</span>:
+              <span class="cd-time">{{ p._cd?.s || '00' }}</span>
             </div>
             <div class="progress-bar">
               <div class="bar" :style="{ width: progress(p) + '%' }"></div>
@@ -42,7 +48,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import Header from '@/components/Header.vue'
@@ -53,9 +59,33 @@ import { useUserStore } from '@/stores/user'
 const router = useRouter()
 const userStore = useUserStore()
 const list = ref<any[]>([])
+const activeList = ref<any[]>([])
 const loading = ref(false)
+let cdTimer: any = null
 
 const defaultImg = 'https://via.placeholder.com/240x240/f5f5f5/ccc?text=商品'
+
+function pad(n: number) { return n < 10 ? '0' + n : '' + n }
+
+function startCountdownLoop() {
+  if (cdTimer) clearInterval(cdTimer)
+  cdTimer = setInterval(() => {
+    const now = Date.now()
+    let changed = false
+    for (const p of list.value) {
+      if (!p.endTime) continue
+      const diff = Math.max(0, p.endTime - now)
+      const h = Math.floor(diff / 3_600_000)
+      const m = Math.floor((diff % 3_600_000) / 60_000)
+      const s = Math.floor((diff % 60_000) / 1000)
+      p._cd = { h: pad(h), m: pad(m), s: pad(s) }
+      if (diff <= 0) changed = true
+    }
+    if (changed) {
+      activeList.value = list.value.filter(p => !p.endTime || p.endTime > Date.now())
+    }
+  }, 1000)
+}
 
 function calcDiscount(p: any) {
   if (!p.originalPrice) return '0'
@@ -76,6 +106,17 @@ async function loadList() {
   try {
     const res = await request.get('/activity/seckill/active')
     list.value = res.data || []
+    for (const p of list.value) {
+      if (p.endTime) {
+        const diff = Math.max(0, Number(p.endTime) - Date.now())
+        const h = Math.floor(diff / 3_600_000)
+        const m = Math.floor((diff % 3_600_000) / 60_000)
+        const s = Math.floor((diff % 60_000) / 1000)
+        p._cd = { h: pad(h), m: pad(m), s: pad(s) }
+      }
+    }
+    activeList.value = list.value.filter(p => !p.endTime || p.endTime > Date.now())
+    startCountdownLoop()
   } finally { loading.value = false }
 }
 
@@ -103,6 +144,7 @@ async function handleSeckill(p: any) {
 }
 
 onMounted(loadList)
+onUnmounted(() => { if (cdTimer) clearInterval(cdTimer) })
 </script>
 
 <style lang="scss" scoped>
@@ -162,6 +204,24 @@ onMounted(loadList)
   align-items: baseline;
   gap: 8px;
   margin-bottom: 8px;
+}
+.countdown-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  .cd-label { color: #666; }
+  .cd-time {
+    display: inline-block;
+    padding: 2px 6px;
+    background: #2b2b2b;
+    border-radius: 4px;
+    color: #fff;
+    font-weight: 600;
+    min-width: 24px;
+    text-align: center;
+  }
 }
 .seckill-price {
   color: #f56c6c;
