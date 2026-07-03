@@ -32,4 +32,8 @@ public class OrderCreateRequest {
     private Long groupActivityId;
 
     private java.math.BigDecimal groupPrice;
+
+    private Long seckillId;
+
+    private java.math.BigDecimal seckillPrice;
 }

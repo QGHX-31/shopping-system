@@ -134,7 +134,8 @@ async function handleSeckill(p: any) {
       query: {
         productId: p.productId,
         quantity: 1,
-        seckillId: p.id
+        seckillId: p.id,
+        seckillPrice: p.seckillPrice
       }
     })
   } catch (e: any) {

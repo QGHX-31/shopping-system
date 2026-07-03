@@ -842,17 +842,26 @@ async function loadData() {
       const pid = parseInt(productId)
       const skuId = route.query.skuId ? parseInt(route.query.skuId as string) : undefined
       const quantity = parseInt(route.query.quantity as string) || 1
+      const seckillId = route.query.seckillId ? parseInt(route.query.seckillId as string) : undefined
+      const seckillPrice = route.query.seckillPrice ? Number(route.query.seckillPrice) : undefined
       const res = await productStore.getProductDetail(pid)
       const p = res.data
+      let productPrice = p.originalPrice != null ? p.originalPrice : p.price
+      
+      if (seckillId && seckillPrice != null && !isNaN(seckillPrice)) {
+        productPrice = seckillPrice
+      }
+      
       orderItems.value = [{
         productId: p.id,
         skuId,
         name: p.name,
         imageUrl: p.imageUrl,
-        price: p.originalPrice != null ? p.originalPrice : p.price,
+        price: productPrice,
         merchantId: p.merchantId,
         categoryId: p.categoryId,
-        quantity
+        quantity,
+        seckillId
       }]
     } else {
       ElMessage.warning('订单信息不完整')
@@ -1127,6 +1136,7 @@ async function handleSubmit() {
   }
   submitting.value = true
   try {
+    const seckillItem = orderItems.value.find((i: any) => i.seckillId)
     const orderData = {
       userId: userStore.userInfo?.id,
       items: orderItems.value.map(i => ({
@@ -1138,7 +1148,9 @@ async function handleSubmit() {
       addressId: selectedAddress.value.id,
       couponId: selectedCouponIds.value.length > 0 ? selectedCouponIds.value[0] : null,
       couponIds: selectedCouponIds.value,
-      remark: remark.value
+      remark: remark.value,
+      seckillId: seckillItem?.seckillId || null,
+      seckillPrice: seckillItem?.price || null
     }
     const res = await request.post('/order/create', orderData)
     ElMessage.success('订单提交成功！')

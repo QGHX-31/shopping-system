@@ -975,7 +975,8 @@ async function handleSeckillBuy() {
     query: {
       productId: product.value.id,
       quantity: 1,
-      seckillId: seckillActivity.value.id
+      seckillId: seckillActivity.value.id,
+      seckillPrice: seckillActivity.value.seckillPrice
     }
   })
 }

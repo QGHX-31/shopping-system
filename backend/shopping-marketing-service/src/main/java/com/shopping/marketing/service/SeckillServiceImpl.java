@@ -460,4 +460,42 @@ public class SeckillServiceImpl implements SeckillService {
         seckillOrderMapper.updateById(order);
         return true;
     }
+
+    @Override
+    @Transactional
+    public boolean deductActivityStock(Long activityId, Integer quantity) {
+        SeckillActivity activity = seckillActivityMapper.selectById(activityId);
+        if (activity == null) {
+            return false;
+        }
+        if (activity.getAvailableStock() == null || activity.getAvailableStock() < quantity) {
+            return false;
+        }
+        String stockKey = SECKILL_STOCK_KEY + activityId;
+        String stockStr = redisUtil.getRawString(stockKey);
+        if (stockStr == null) {
+            redisUtil.setRawString(stockKey, String.valueOf(activity.getAvailableStock()));
+        }
+        Long newStock = redisUtil.atomicDecrementStrict(stockKey, quantity);
+        if (newStock < 0) {
+            return false;
+        }
+        activity.setAvailableStock(newStock.intValue());
+        seckillActivityMapper.updateById(activity);
+        return true;
+    }
+
+    @Override
+    @Transactional
+    public boolean rollbackActivityStock(Long activityId, Integer quantity) {
+        SeckillActivity activity = seckillActivityMapper.selectById(activityId);
+        if (activity == null) {
+            return false;
+        }
+        String stockKey = SECKILL_STOCK_KEY + activityId;
+        redisUtil.atomicIncrement(stockKey, quantity);
+        activity.setAvailableStock((activity.getAvailableStock() == null ? 0 : activity.getAvailableStock()) + quantity);
+        seckillActivityMapper.updateById(activity);
+        return true;
+    }
 }

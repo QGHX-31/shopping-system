@@ -113,4 +113,19 @@ public class SeckillController {
         }
         return Result.success(true);
     }
+
+    @PostMapping("/stock/deduct")
+    public Result<Boolean> deductStock(@RequestParam Long activityId, @RequestParam Integer quantity) {
+        boolean success = seckillService.deductActivityStock(activityId, quantity);
+        if (!success) {
+            return Result.error("秒杀库存不足");
+        }
+        return Result.success(true);
+    }
+
+    @PostMapping("/stock/rollback")
+    public Result<Boolean> rollbackStock(@RequestParam Long activityId, @RequestParam Integer quantity) {
+        boolean success = seckillService.rollbackActivityStock(activityId, quantity);
+        return Result.success(success);
+    }
 }

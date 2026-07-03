@@ -15,6 +15,7 @@ import com.shopping.order.entity.Order;
 import com.shopping.order.entity.OrderItem;
 import com.shopping.order.entity.Refund;
 import com.shopping.order.feign.ProductClient;
+import com.shopping.order.feign.MarketingClient;
 import com.shopping.order.mapper.CouponTemplateMapper;
 import com.shopping.order.mapper.ExchangeMapper;
 import com.shopping.order.mapper.MerchantCouponParticipationMapper;
@@ -67,6 +68,7 @@ public class OrderServiceImpl implements OrderService {
     @Autowired private ExchangeMapper exchangeMapper;
     @Autowired private MessageService messageService;
     @Autowired(required = false) private ProductClient productClient;
+    @Autowired(required = false) private MarketingClient marketingClient;
 
     @Value("${shopping.product-service-url:http://localhost:8082}")
     private String productServiceUrl;
@@ -118,12 +120,29 @@ public class OrderServiceImpl implements OrderService {
 
         // 4. 扣减库存（预占库存）
         List<OrderItemRequest> deductedItems = new ArrayList<>();
+        boolean seckillStockDeducted = false;
+        
+        // 如果是秒杀订单，先扣减秒杀库存
+        if (request.getSeckillId() != null && request.getSeckillPrice() != null) {
+            int totalQuantity = request.getItems().stream().mapToInt(OrderItemRequest::getQuantity).sum();
+            boolean seckillOk = callMarketingDeductSeckillStock(request.getSeckillId(), totalQuantity);
+            if (!seckillOk) {
+                throw new BusinessException("秒杀库存不足");
+            }
+            seckillStockDeducted = true;
+        }
+        
         for (OrderItemRequest item : request.getItems()) {
             Boolean ok = callProductDeductStock(item.getProductId(), item.getSkuId(), item.getQuantity());
             if (!Boolean.TRUE.equals(ok)) {
                 // 回滚已扣减的库存
                 for (OrderItemRequest d : deductedItems) {
                     callProductAddStock(d.getProductId(), d.getSkuId(), d.getQuantity());
+                }
+                // 回滚秒杀库存
+                if (seckillStockDeducted) {
+                    int totalQuantity = request.getItems().stream().mapToInt(OrderItemRequest::getQuantity).sum();
+                    callMarketingRollbackSeckillStock(request.getSeckillId(), totalQuantity);
                 }
                 throw new BusinessException("库存扣减失败");
             }
@@ -146,8 +165,13 @@ public class OrderServiceImpl implements OrderService {
                     Product product = productCache.get(item.getProductId());
                     BigDecimal price = product.getPrice();
                     
+                    // 如果是秒杀订单且有秒杀价，使用秒杀价
+                    if (request.getSeckillId() != null 
+                            && request.getSeckillPrice() != null && request.getSeckillPrice().compareTo(BigDecimal.ZERO) > 0) {
+                        price = request.getSeckillPrice();
+                    }
                     // 如果是拼团订单且有拼团价，使用拼团价
-                    if (request.getGroupTeamNo() != null && !request.getGroupTeamNo().isEmpty() 
+                    else if (request.getGroupTeamNo() != null && !request.getGroupTeamNo().isEmpty() 
                             && request.getGroupPrice() != null && request.getGroupPrice().compareTo(BigDecimal.ZERO) > 0) {
                         price = request.getGroupPrice();
                     }
@@ -1111,6 +1135,45 @@ public class OrderServiceImpl implements OrderService {
             restTemplate.postForEntity(url.toString(), null, Map.class);
         } catch (Exception e) {
             log.error("恢复库存失败", e);
+        }
+    }
+
+    private boolean callMarketingDeductSeckillStock(Long activityId, Integer quantity) {
+        try {
+            if (marketingClient != null) {
+                try {
+                    Result<Boolean> result = marketingClient.deductSeckillStock(activityId, quantity);
+                    if (result != null && result.getCode() != null && result.getCode() == 200) {
+                        return Boolean.TRUE.equals(result.getData());
+                    }
+                } catch (Exception e) {
+                    log.warn("Feign调用扣减秒杀库存失败，降级使用RestTemplate: activityId={}", activityId, e);
+                }
+            }
+            String url = marketingServiceUrl + "/seckill/stock/deduct?activityId=" + activityId + "&quantity=" + quantity;
+            ResponseEntity<Map> resp = restTemplate.postForEntity(url, null, Map.class);
+            Map body = resp.getBody();
+            return body != null && Integer.valueOf(200).equals(body.get("code")) && Boolean.TRUE.equals(body.get("data"));
+        } catch (Exception e) {
+            log.error("扣减秒杀库存失败", e);
+            return false;
+        }
+    }
+
+    private void callMarketingRollbackSeckillStock(Long activityId, Integer quantity) {
+        try {
+            if (marketingClient != null) {
+                try {
+                    marketingClient.rollbackSeckillStock(activityId, quantity);
+                    return;
+                } catch (Exception e) {
+                    log.warn("Feign调用回滚秒杀库存失败，降级使用RestTemplate: activityId={}", activityId, e);
+                }
+            }
+            String url = marketingServiceUrl + "/seckill/stock/rollback?activityId=" + activityId + "&quantity=" + quantity;
+            restTemplate.postForEntity(url, null, Map.class);
+        } catch (Exception e) {
+            log.error("回滚秒杀库存失败", e);
         }
     }
 

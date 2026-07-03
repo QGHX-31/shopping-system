@@ -32,4 +32,8 @@ public interface SeckillService {
     Map<String, Object> getMerchantOrders(Long merchantId, Integer page, Integer size);
     
     boolean deliverOrder(Long orderId, String trackingNo);
+
+    boolean deductActivityStock(Long activityId, Integer quantity);
+
+    boolean rollbackActivityStock(Long activityId, Integer quantity);
 }
