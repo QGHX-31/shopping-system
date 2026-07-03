@@ -58,6 +58,11 @@
             <el-option v-for="p in productList" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
+        <el-form-item label="选择规格" v-if="skuList.length > 0">
+          <el-select v-model="editForm.skuId" placeholder="请选择规格" style="width: 100%;" @change="handleSkuChange">
+            <el-option v-for="sku in skuList" :key="sku.id" :label="sku.specValues || sku.skuCode" :value="sku.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="原价">
           <el-input-number v-model="editForm.originalPrice" :min="0" :precision="2" style="width: 100%;" />
         </el-form-item>
@@ -104,6 +109,7 @@ const merchantId = getMerchantId()
 
 const tableData = ref<any[]>([])
 const productList = ref<any[]>([])
+const skuList = ref<any[]>([])
 const dialogVisible = ref(false)
 const pagination = reactive({
   page: 1,
@@ -180,18 +186,42 @@ const loadProducts = async () => {
 }
 
 const handleProductChange = async (productId: number) => {
-  if (!productId) return
+  if (!productId) {
+    skuList.value = []
+    editForm.skuId = null
+    return
+  }
   try {
-    const res = await merchantRequest.get(`/product/${productId}`)
-    const product = res.data
+    const [productRes, skuRes] = await Promise.all([
+      merchantRequest.get(`/product/${productId}`),
+      merchantRequest.get('/sku/list/all', { params: { productId, page: 1, size: 100 } })
+    ])
+    const product = productRes.data
     if (product) {
       editForm.originalPrice = product.originalPrice || product.price || 0
       const groupPrice = product.groupPrice || product.price || 0
       editForm.groupPrice = groupPrice
       editForm.seckillPrice = groupPrice ? Math.floor(groupPrice * 0.8) : 0
     }
+    skuList.value = skuRes.data?.list || []
+    if (skuList.value.length > 0) {
+      editForm.skuId = skuList.value[0].id
+      handleSkuChange(skuList.value[0].id)
+    } else {
+      editForm.skuId = null
+    }
   } catch (error) {
     console.error('获取商品信息失败', error)
+  }
+}
+
+const handleSkuChange = (skuId: number) => {
+  if (!skuId) return
+  const sku = skuList.value.find(s => s.id === skuId)
+  if (sku) {
+    editForm.originalPrice = sku.originalPrice || sku.price || editForm.originalPrice
+    editForm.totalStock = sku.stock || 0
+    editForm.availableStock = sku.stock || 0
   }
 }
 
@@ -206,6 +236,7 @@ const openCreateDialog = () => {
   editForm.availableStock = 0
   editForm.dateRange = []
   editForm.description = ''
+  skuList.value = []
   dialogVisible.value = true
 }
 
@@ -220,6 +251,18 @@ const editActivity = async (row: any) => {
   editForm.availableStock = row.availableStock
   editForm.dateRange = row.startTime && row.endTime ? [new Date(row.startTime), new Date(row.endTime)] : []
   editForm.description = row.description || ''
+  
+  if (row.productId) {
+    try {
+      const skuRes = await merchantRequest.get('/sku/list/all', { 
+        params: { productId: row.productId, page: 1, size: 100 } 
+      })
+      skuList.value = skuRes.data?.list || []
+    } catch (e) {
+      console.error('加载SKU列表失败', e)
+    }
+  }
+  
   dialogVisible.value = true
 }
 
