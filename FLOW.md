@@ -133,7 +133,7 @@ Content-Type: application/json
 
 Request:
 {
-  "username": "merchant001",
+  "username": "merchant01",
   "password": "123456"
 }
 
@@ -142,7 +142,7 @@ Response:
   "code": 200,
   "data": {
     "id": 1,
-    "username": "merchant001",
+    "username": "merchant01",
     "name": "XX旗舰店"
   }
 }
@@ -219,7 +219,7 @@ GET /api/coupon/list     - 优惠券列表
 
 ```sql
 INSERT INTO merchant (id, username, password, name, status) 
-VALUES (1, 'merchant001', '123456', 'XX旗舰店', 1);
+VALUES (1, 'merchant01', '123456', 'XX旗舰店', 1);
 ```
 
 访问 `http://localhost:3003/merchant/login` 用上述账号登录。

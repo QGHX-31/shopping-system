@@ -1,18 +1,25 @@
-# IDEA 本地配置文件，不上传
+# IDEA / VS Code 本地配置，不上传
 .idea/
+.vscode/
 *.iml
 out/
 
 # Maven 各模块编译产物 target
 **/target/
 
-# Nacos注册中心完整安装包，绝对不上传仓库
+# Nacos 注册中心完整安装包，绝对不上传仓库
 nacos-server-2.2.3/
 
 # 前端超大依赖包、打包产物
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+
+# 运行时用户上传文件目录
+.uploads/
+
+# 误放的鸿蒙项目，不属于本项目
+MyApplicationwork/
 
 # 运行日志、缓存文件
 logs/
@@ -26,3 +33,13 @@ Thumbs.db
 # 本地数据库备份文件
 database/*.bak
 database/*.sql.old
+
+# 开发期临时调试脚本（check/fix/add/insert 类，用完即弃）
+database/check_*.sql
+database/fix_*.sql
+database/add_*.sql
+database/insert_*.sql
+
+# 课设报告素材等非代码文档
+报告素材.doc
+~$*.doc

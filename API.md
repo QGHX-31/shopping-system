@@ -13,7 +13,7 @@
 - `POST /merchant/login`
 - Body：`{ username, password }`
 - 响应：`{ token, merchant: {...} }`
-- 测试账号：`merchant01` / `123456`
+- 测试账号：`merchant01~15` / `123456`
 
 ### 1.2 商家信息
 - `GET /merchant/info?merchantId={id}`

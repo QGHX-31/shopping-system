@@ -114,7 +114,7 @@ public class MerchantDashboardServiceImpl implements MerchantDashboardService {
     public Map<String, Object> getSalesTrend(Long merchantId, Integer days) {
         if (days == null || days < 1) days = 7;
         List<String> dates = new ArrayList<>();
-        List<Integer> orderData = new ArrayList<>();
+        List<Integer> orderData  = new ArrayList<>();
         List<BigDecimal> amountData = new ArrayList<>();
 
         LocalDate today = LocalDate.now();
